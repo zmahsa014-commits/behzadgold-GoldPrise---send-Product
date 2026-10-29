@@ -10,14 +10,17 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from flask import Flask
 from supabase import create_client, Client
 
-# ===== خواندن تنظیمات از متغیرهای محیطی (برای رندر) =====
-WC_URL = os.environ.get("WC_URL")
-WC_KEY = os.environ.get("WC_KEY")
-WC_SECRET = os.environ.get("WC_SECRET")
+# ===== خواندن تنظیمات =====
+with open("config.json", "r", encoding="utf-8") as f:
+    CONFIG = json.load(f)
 
-BALE_TOKEN = os.environ.get("BALE_TOKEN")
-BALE_CHANNEL = os.environ.get("BALE_CHANNEL")
-PRICE_JSON_URL = os.environ.get("PRICE_JSON_URL")
+WC_URL = CONFIG["wc_url"]
+WC_KEY = CONFIG["wc_key"]
+WC_SECRET = CONFIG["wc_secret"]
+
+BALE_TOKEN = CONFIG["bale_bot_token"]
+BALE_CHANNEL = CONFIG["bale_channel_id"]
+PRICE_JSON_URL = CONFIG["price_json_url"]
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
