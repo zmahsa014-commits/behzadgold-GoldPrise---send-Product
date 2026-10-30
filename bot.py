@@ -7,10 +7,10 @@ import json
 import threading
 import traceback
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from flask import Flask
+from flask import Flask, request
 from supabase import create_client, Client
 
-# ===== خواندن تنظیمات (از متغیرهای محیطی) =====
+# ===== خواندن تنظیمات از متغیرهای محیطی =====
 WC_URL = os.environ.get("WC_URL")
 WC_KEY = os.environ.get("WC_KEY")
 WC_SECRET = os.environ.get("WC_SECRET")
@@ -29,15 +29,26 @@ BATCH_SIZE = 1
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 
-# اگر متغیرها تنظیم شده باشند، کلاینت ساخته می‌شود
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY) if SUPABASE_URL and SUPABASE_KEY else None
 
-# ===== وب‌سرور =====
+# ===== وب‌سرور (Flask) =====
 app = Flask(__name__)
 
 @app.route("/")
 def home():
     return "Behzadgold Bot is running."
+
+# مسیر دریافت Webhook از بله
+@app.route("/webhook", methods=['POST'])
+def webhook():
+    update = request.get_json()
+    if update:
+        # چون Flask همگام (Sync) است، از asyncio.run برای اجرای کدهای async استفاده می‌کنیم
+        try:
+            asyncio.run(process_update(update))
+        except Exception as e:
+            print(f"❌ خطا در پردازش Webhook: {e}")
+    return "OK", 200
 
 def run_web_server():
     port = int(os.environ.get("PORT", 10000))
@@ -346,53 +357,41 @@ async def check_out_of_stock():
                 save_out_of_stock(out_of_stock)
             await asyncio.sleep(1)
 
-# ===== ۴. ربات بله (دکمه استارت) =====
-async def bale_polling():
-    offset = 0
+# ===== ۴. پردازش پیام‌های دریافتی از بله (Webhook) =====
+async def process_update(update):
     base_url = f"https://tapi.bale.ai/bot{BALE_TOKEN}"
-    
-    while True:
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(f"{base_url}/getUpdates", params={"offset": offset}, timeout=10) as resp:
-                    if resp.status == 200:
-                        data = await resp.json()
-                        if data.get("ok"):
-                            for upd in data.get("result", []):
-                                offset = upd["update_id"] + 1
-                                
-                                if "message" in upd:
-                                    msg = upd["message"]
-                                    chat_id = msg["chat"]["id"]
-                                    if msg.get("text") == "/start":
-                                        keyboard = {"inline_keyboard": [[{"text": "💰 قیمت لحظه‌ای طلا", "callback_data": "get_live_gold"}]]}
-                                        await send_to_bale(chat_id, "سلام! برای دریافت قیمت لحظه‌ای طلا روی دکمه زیر بزنید:", reply_markup=keyboard)
-                                
-                                elif "callback_query" in upd:
-                                    cb = upd["callback_query"]
-                                    cb_id = cb["id"]
-                                    chat_id = cb["message"]["chat"]["id"]
-                                    cb_data = cb["data"]
-                                    
-                                    async with session.post(f"{base_url}/answerCallbackQuery", json={"callback_query_id": cb_id}) as ans: pass
-                                    
-                                    if cb_data == "get_live_gold":
-                                        text = await get_gold_price_text()
-                                        keyboard = {"inline_keyboard": [[{"text": "🔄 به‌روزرسانی قیمت", "callback_data": "get_live_gold"}]]}
-                                        await send_to_bale(chat_id, text, reply_markup=keyboard)
-        except asyncio.TimeoutError: pass
-        except Exception as e: print(f"❌ خطای شبکه در polling: {e}")
+    try:
+        if "message" in update:
+            msg = update["message"]
+            chat_id = msg["chat"]["id"]
+            if msg.get("text") == "/start":
+                keyboard = {"inline_keyboard": [[{"text": "💰 قیمت لحظه‌ای طلا", "callback_data": "get_live_gold"}]]}
+                await send_to_bale(chat_id, "سلام! برای دریافت قیمت لحظه‌ای طلا روی دکمه زیر بزنید:", reply_markup=keyboard)
         
-        await asyncio.sleep(2)
+        elif "callback_query" in update:
+            cb = update["callback_query"]
+            cb_id = cb["id"]
+            chat_id = cb["message"]["chat"]["id"]
+            cb_data = cb["data"]
+            
+            async with aiohttp.ClientSession() as session:
+                await session.post(f"{base_url}/answerCallbackQuery", json={"callback_query_id": cb_id})
+            
+            if cb_data == "get_live_gold":
+                text = await get_gold_price_text()
+                keyboard = {"inline_keyboard": [[{"text": "🔄 به‌روزرسانی قیمت", "callback_data": "get_live_gold"}]]}
+                await send_to_bale(chat_id, text, reply_markup=keyboard)
+    except Exception as e:
+        print(f"❌ خطا در پردازش آپدیت: {e}")
 
 # ===== اجرا =====
 async def main():
+    # اجرای وب‌سرور Flask در یک ترد جداگانه
     if os.environ.get("PORT"):
         web_thread = threading.Thread(target=run_web_server, daemon=True)
         web_thread.start()
 
     scheduler = AsyncIOScheduler()
-    
     scheduler.add_job(send_gold_price, 'interval', minutes=1) 
     scheduler.add_job(check_and_send_products, 'interval', minutes=1)
     scheduler.add_job(check_out_of_stock, 'interval', hours=168) 
@@ -400,8 +399,7 @@ async def main():
     scheduler.start()
     print("⏰ زمان‌بندها فعال شدند.")
 
-    asyncio.create_task(bale_polling())
-    
+    # حلقه بی‌نهایت برای زنده نگه داشتن برنامه
     while True:
         await asyncio.sleep(3600)
 
