@@ -8,6 +8,7 @@ import threading
 import traceback
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from flask import Flask
+from supabase import create_client, Client
 
 # ===== خواندن تنظیمات از متغیرهای محیطی =====
 WC_URL = os.environ.get("WC_URL")
@@ -24,6 +25,12 @@ HEADERS = {
 
 BATCH_SIZE = 1 
 
+# ===== اتصال به Supabase =====
+SUPABASE_URL = os.environ.get("SUPABASE_URL")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
+
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY) if SUPABASE_URL and SUPABASE_KEY else None
+
 # ===== وب‌سرور =====
 app = Flask(__name__)
 
@@ -33,48 +40,79 @@ def home():
 
 def run_web_server():
     port = int(os.environ.get("PORT", 10000))
+    print(f"🌐 [FLASK] وب‌سرور برای بیدار نگه داشتن رندر روی پورت {port} اجرا شد...")
     app.run(host="0.0.0.0", port=port)
 
-# ===== توابع کمکی ذخیره‌سازی (همان فایل‌های قبلی) =====
-LAST_ID_FILE = "last_id.txt"
-SENT_HISTORY_FILE = "sent_products.json"
-OUT_OF_STOCK_FILE = "out_of_stock.json"
-
+# ===== توابع کمکی ذخیره‌سازی (Supabase) =====
 def get_last_id():
-    if os.path.exists(LAST_ID_FILE):
-        with open(LAST_ID_FILE, "r") as f:
-            try: return int(f.read().strip())
-            except: return 0
-    return 0
+    if not supabase: return 0
+    try:
+        print("🔍 [DB] در حال خواندن last_id از دیتابیس...")
+        response = supabase.table("last_orders").select("last_order_id").eq("site_name", "behzadgold_bot_last_id").execute()
+        if response.data:
+            val = int(response.data[0]["last_order_id"])
+            print(f"✅ [DB] last_id خوانده شد: {val}")
+            return val
+        return 0
+    except Exception as e:
+        print(f"❌ [DB] خطا در خواندن last_id: {e}")
+        return 0
 
 def save_last_id(p_id):
-    with open(LAST_ID_FILE, "w") as f:
-        f.write(str(p_id))
+    if not supabase: return
+    try:
+        print(f"💾 [DB] در حال ذخیره last_id: {p_id}")
+        supabase.table("last_orders").update({"last_order_id": int(p_id)}).eq("site_name", "behzadgold_bot_last_id").execute()
+    except Exception as e:
+        print(f"❌ [DB] خطا در ذخیره last_id: {e}")
 
 def get_sent_history():
-    if os.path.exists(SENT_HISTORY_FILE):
-        with open(SENT_HISTORY_FILE, "r") as f:
-            try: return set(json.load(f))
-            except: return set()
-    return set()
+    if not supabase: return set()
+    try:
+        print("🔍 [DB] در حال خواندن تاریخچه ارسال...")
+        response = supabase.table("last_orders").select("last_order_id").eq("site_name", "behzadgold_bot_sent_history").execute()
+        if response.data and response.data[0]["last_order_id"] != 0:
+            data = set(json.loads(str(response.data[0]["last_order_id"])))
+            print(f"✅ [DB] تاریخچه خوانده شد. تعداد: {len(data)}")
+            return data
+        return set()
+    except Exception as e:
+        print(f"❌ [DB] خطا در خواندن تاریخچه: {e}")
+        return set()
 
 def save_sent_history(history_set):
-    with open(SENT_HISTORY_FILE, "w") as f:
-        json.dump(list(history_set), f)
+    if not supabase: return
+    try:
+        print(f"💾 [DB] در حال ذخیره تاریخچه. تعداد: {len(history_set)}")
+        supabase.table("last_orders").update({"last_order_id": json.dumps(list(history_set))}).eq("site_name", "behzadgold_bot_sent_history").execute()
+    except Exception as e:
+        print(f"❌ [DB] خطا در ذخیره تاریخچه: {e}")
 
 def get_out_of_stock():
-    if os.path.exists(OUT_OF_STOCK_FILE):
-        with open(OUT_OF_STOCK_FILE, "r") as f:
-            try: return set(json.load(f))
-            except: return set()
-    return set()
+    if not supabase: return set()
+    try:
+        print("🔍 [DB] در حال خواندن لیست ناموجودها...")
+        response = supabase.table("last_orders").select("last_order_id").eq("site_name", "behzadgold_bot_out_of_stock").execute()
+        if response.data and response.data[0]["last_order_id"] != 0:
+            data = set(json.loads(str(response.data[0]["last_order_id"])))
+            print(f"✅ [DB] لیست ناموجودها خوانده شد. تعداد: {len(data)}")
+            return data
+        return set()
+    except Exception as e:
+        print(f"❌ [DB] خطا در خواندن لیست ناموجودها: {e}")
+        return set()
 
 def save_out_of_stock(out_set):
-    with open(OUT_OF_STOCK_FILE, "w") as f:
-        json.dump(list(out_set), f)
+    if not supabase: return
+    try:
+        print(f"💾 [DB] در حال ذخیره لیست ناموجودها. تعداد: {len(out_set)}")
+        supabase.table("last_orders").update({"last_order_id": json.dumps(list(out_set))}).eq("site_name", "behzadgold_bot_out_of_stock").execute()
+    except Exception as e:
+        print(f"❌ [DB] خطا در ذخیره لیست ناموجودها: {e}")
 
 # ===== ارسال پیام =====
 async def send_to_bale(chat_id, text, photo_url=None, reply_markup=None):
+    print(f"✉️ [BALE] در حال ارسال پیام به {chat_id}...")
     base_url = f"https://tapi.bale.ai/bot{BALE_TOKEN}"
     data = {"chat_id": chat_id}
     if photo_url:
@@ -92,13 +130,14 @@ async def send_to_bale(chat_id, text, photo_url=None, reply_markup=None):
             async with aiohttp.ClientSession() as session:
                 async with session.post(url, json=data, timeout=20) as resp:
                     if resp.status == 200:
+                        print(f"✅ [BALE] پیام ارسال شد.")
                         return True
                     else:
-                        print(f"⚠️ خطای بله ({resp.status}) - تلاش {attempt+1} از 3")
+                        err = await resp.text()
+                        print(f"⚠️ [BALE] خطای بله ({resp.status}): {err}")
         except Exception as e:
-            print(f"⚠️ خطای شبکه ({e}) - تلاش {attempt+1} از 3")
+            print(f"⚠️ [BALE] خطای شبکه ({e}) - تلاش {attempt+1}")
         await asyncio.sleep(2)
-    
     return False
 
 # ===== قیمت طلا =====
@@ -108,7 +147,7 @@ async def get_gold_price_text():
             async with session.get(PRICE_JSON_URL, headers=HEADERS, timeout=15) as resp:
                 if resp.status == 200:
                     data = await resp.json()
-                    text = (
+                    return (
                         f"📊 **قیمت لحظه‌ای طلا و سکه**\n\n"
                         f"🥇 هر گرم طلای ۱۸ عیار: **{data.get('Geram18', '—')}** تومان\n"
                         f"🔄 هر گرم طلای تعویضی: **{data.get('Taviz', '—')}** تومان\n"
@@ -124,16 +163,15 @@ async def get_gold_price_text():
                         f"🌍 اونس جهانی طلا: **{data.get('Ons', '—')}** دلار\n\n"
                         f"📅 تاریخ: {data.get('Date', '—')} - {data.get('Time', '—')}"
                     )
-                    return text
     except Exception as e:
-        print(f"❌ خطا در دریافت قیمت طلا: {e}")
+        print(f"❌ [PRICE] خطا در دریافت قیمت: {e}")
     return "❌ خطا در دریافت قیمت طلا."
 
 async def send_gold_price():
-    print("⏰ در حال ارسال قیمت طلا به کانال...")
+    print("⏰ [JOB] زمان‌بند قیمت طلا...")
     text = await get_gold_price_text()
     await send_to_bale(BALE_CHANNEL, text)
-    print("✅ قیمت طلا به کانال ارسال شد.")
+    print("✅ [JOB] قیمت طلا به کانال ارسال شد.")
 
 # ===== محصولات =====
 async def fetch_products(params):
@@ -143,10 +181,9 @@ async def fetch_products(params):
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(url, params=final_params, headers=HEADERS, timeout=15) as resp:
-                if resp.status == 200:
-                    return await resp.json()
+                if resp.status == 200: return await resp.json()
     except Exception as e:
-        print(f"❌ خطا در API: {e}")
+        print(f"❌ [API] خطا: {e}")
     return []
 
 async def fetch_variations(product_id):
@@ -155,10 +192,9 @@ async def fetch_variations(product_id):
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(url, params=params, headers=HEADERS, timeout=15) as resp:
-                if resp.status == 200:
-                    return await resp.json()
+                if resp.status == 200: return await resp.json()
     except Exception as e:
-        print(f"❌ خطا در دریافت واریشن‌ها: {e}")
+        print(f"❌ [API] خطا واریشن: {e}")
     return []
 
 async def format_and_send_product(p):
@@ -218,14 +254,14 @@ async def format_and_send_product(p):
 
     success = await send_to_bale(BALE_CHANNEL, text, photo_url=photo_url)
     if success:
-        print(f"✅ محصول #{p['id']} ({name}) ارسال شد.")
+        print(f"✅ [PRODUCT] محصول #{p['id']} ({name}) ارسال شد.")
         return True
     else:
-        print(f"❌ محصول #{p['id']} ({name}) ارسال نشد.")
+        print(f"❌ [PRODUCT] محصول #{p['id']} ({name}) ارسال نشد.")
         return False
 
 async def check_and_send_products():
-    print("🔍 در حال بررسی محصولات...")
+    print("\n🔍 [JOB] زمان‌بند بررسی محصولات...")
     last_id = get_last_id()
     history = get_sent_history()
     out_of_stock = get_out_of_stock()
@@ -234,7 +270,7 @@ async def check_and_send_products():
     truly_new = [p for p in new_products if p["id"] > last_id and p.get("stock_status") != "outofstock"]
     
     if truly_new:
-        print(f"🎉 {len(truly_new)} محصول جدید پیدا شد!")
+        print(f"🎉 [JOB] {len(truly_new)} محصول جدید پیدا شد!")
         truly_new.sort(key=lambda x: x["id"]) 
         for p in truly_new[:BATCH_SIZE]:
             success = await format_and_send_product(p)
@@ -243,35 +279,31 @@ async def check_and_send_products():
                 save_last_id(p["id"])
                 save_sent_history(history)
             else:
-                print("⚠️ ارسال ناموفق بود. تلاش بعدی...")
+                print("⚠️ [JOB] ارسال ناموفق بود. تلاش بعدی...")
                 return
         return
 
-    print("⚠️ محصول جدیدی نیست. در حال جستجو در آرشیو...")
+    print("⚠️ [JOB] محصول جدیدی نیست. در حال جستجو در آرشیو...")
     unsent = []
     page = 1
     while True:
         batch = await fetch_products({"per_page": 100, "page": page, "orderby": "id", "order": "desc"})
-        if not batch:
-            break
+        if not batch: break
         for p in batch:
             if p.get("stock_status") == "outofstock":
                 out_of_stock.add(p["id"])
                 continue
-            if p["id"] in history:
-                continue
+            if p["id"] in history: continue
             unsent.append(p)
             break 
-        if unsent:
-            break
+        if unsent: break
         page += 1
-        if page > 100:
-            break
+        if page > 100: break
 
     save_out_of_stock(out_of_stock)
 
     if not unsent:
-        print("✅ همه محصولات (موجود) ارسال شده‌اند. صبر برای محصول جدید...")
+        print("✅ [JOB] همه محصولات (موجود) ارسال شده‌اند.")
         return
 
     p = unsent[0]
@@ -279,22 +311,19 @@ async def check_and_send_products():
     if success:
         history.add(p["id"])
         save_sent_history(history)
-    else:
-        print("⚠️ ارسال ناموفق بود. تلاش بعدی...")
 
 async def check_out_of_stock():
-    print("📦 در حال بررسی هفتگی محصولات ناموجود...")
+    print("\n📦 [JOB] زمان‌بند هفتگی محصولات ناموجود...")
     out_of_stock = get_out_of_stock()
     history = get_sent_history()
-    if not out_of_stock:
-        return
-    oos_list = list(out_of_stock)
-    for p_id in oos_list:
+    if not out_of_stock: return
+
+    for p_id in list(out_of_stock):
         p_data = await fetch_products({"include": p_id})
         if not p_data: continue
         p = p_data[0]
         if p.get("stock_status") != "outofstock" and p["id"] not in history:
-            print(f"🎉 محصول #{p['id']} موجود شد! ارسال...")
+            print(f"🎉 [JOB] محصول #{p['id']} موجود شد! ارسال...")
             success = await format_and_send_product(p)
             if success:
                 history.add(p["id"])
@@ -305,52 +334,59 @@ async def check_out_of_stock():
 
 # ===== ربات بله (Polling) =====
 async def bale_polling():
+    print("🤖 [POLLING] حلقه دریافت پیام‌ها شروع شد...")
     offset = 0
     base_url = f"https://tapi.bale.ai/bot{BALE_TOKEN}"
     while True:
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.get(f"{base_url}/getUpdates", params={"offset": offset}, timeout=10) as resp:
+                async with session.get(f"{base_url}/getUpdates", params={"offset": offset}, timeout=15) as resp:
                     if resp.status == 200:
                         data = await resp.json()
                         if data.get("ok"):
                             for upd in data.get("result", []):
                                 offset = upd["update_id"] + 1
+                                print(f"📩 [POLLING] پیام دریافت شد! ID: {upd['update_id']}")
                                 if "message" in upd:
                                     msg = upd["message"]
                                     chat_id = msg["chat"]["id"]
                                     if msg.get("text") == "/start":
+                                        print(f"👤 [POLLING] /start از {chat_id}")
                                         keyboard = {"inline_keyboard": [[{"text": "💰 قیمت لحظه‌ای طلا", "callback_data": "get_live_gold"}]]}
                                         await send_to_bale(chat_id, "سلام! برای دریافت قیمت لحظه‌ای طلا روی دکمه زیر بزنید:", reply_markup=keyboard)
                                 elif "callback_query" in upd:
                                     cb = upd["callback_query"]
-                                    cb_id = cb["id"]
-                                    chat_id = cb["message"]["chat"]["id"]
-                                    cb_data = cb["data"]
-                                    async with session.post(f"{base_url}/answerCallbackQuery", json={"callback_query_id": cb_id}) as ans: pass
-                                    if cb_data == "get_live_gold":
+                                    print(f"🔘 [POLLING] دکمه از {cb['message']['chat']['id']}")
+                                    async with session.post(f"{base_url}/answerCallbackQuery", json={"callback_query_id": cb["id"]}) as ans: pass
+                                    if cb["data"] == "get_live_gold":
                                         text = await get_gold_price_text()
                                         keyboard = {"inline_keyboard": [[{"text": "🔄 به‌روزرسانی قیمت", "callback_data": "get_live_gold"}]]}
-                                        await send_to_bale(chat_id, text, reply_markup=keyboard)
+                                        await send_to_bale(cb["message"]["chat"]["id"], text, reply_markup=keyboard)
         except asyncio.TimeoutError: pass
-        except Exception as e: print(f"❌ خطای شبکه در polling: {e}")
+        except Exception as e: print(f"❌ [POLLING] خطای شبکه: {e}")
         await asyncio.sleep(2)
 
 # ===== اجرا =====
 async def main():
+    print("🚀 [MAIN] شروع برنامه...")
+    if supabase:
+        print("✅ [MAIN] کلاینت Supabase ساخته شد.")
+    else:
+        print("❌ [MAIN] هشدار: کلاینت Supabase ساخته نشد!")
+
     if os.environ.get("PORT"):
-        web_thread = threading.Thread(target=run_web_server, daemon=True)
-        web_thread.start()
+        threading.Thread(target=run_web_server, daemon=True).start()
 
     scheduler = AsyncIOScheduler()
-    scheduler.add_job(send_gold_price, 'interval', minutes=1) 
-    scheduler.add_job(check_and_send_products, 'interval', minutes=1)
+    scheduler.add_job(send_gold_price, 'interval', minutes=60) 
+    scheduler.add_job(check_and_send_products, 'interval', minutes=120)
     scheduler.add_job(check_out_of_stock, 'interval', hours=168) 
     scheduler.start()
-    print("⏰ زمان‌بندها فعال شدند.")
+    print("⏰ [MAIN] زمان‌بندها فعال شدند.")
 
     asyncio.create_task(bale_polling())
-    
+    print("✅ [MAIN] ربات فعال شد.")
+
     while True:
         await asyncio.sleep(3600)
 
@@ -358,5 +394,5 @@ if __name__ == "__main__":
     try:
         asyncio.run(main())
     except Exception as e:
-        print(f"❌ خطای اصلی: {e}")
+        print(f"❌ [MAIN] خطای اصلی: {e}")
         traceback.print_exc()
