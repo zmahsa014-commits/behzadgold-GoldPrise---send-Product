@@ -261,138 +261,50 @@ async def format_and_send_product(p):
         return False
 
 async def check_and_send_products():
-    print("\n🔍 [JOB] زمان‌بند بررسی محصولات...")
-    last_id = get_last_id()
+    print("\n🔍 [JOB] زمان‌بند بررسی محصولات اجرا شد.")
     history = get_sent_history()
     out_of_stock = get_out_of_stock()
 
-    new_products = await fetch_products({"per_page": 10, "orderby": "id", "order": "desc"})
-    truly_new = [p for p in new_products if p["id"] > last_id and p.get("stock_status") != "outofstock"]
-    
-    if truly_new:
-        print(f"🎉 [JOB] {len(truly_new)} محصول جدید پیدا شد!")
-        truly_new.sort(key=lambda x: x["id"]) 
-        for p in truly_new[:BATCH_SIZE]:
-            success = await format_and_send_product(p)
-            if success:
-                history.add(p["id"])
-                save_last_id(p["id"])
-                save_sent_history(history)
-            else:
-                print("⚠️ [JOB] ارسال ناموفق بود. تلاش بعدی...")
-                return
-        return
-
-    print("⚠️ [JOB] محصول جدیدی نیست. در حال جستجو در آرشیو...")
-    unsent = []
+    # ===== ۱. جستجو در کل آرشیو برای پیدا کردن اولین محصول ارسال‌نشده =====
+    print("🔎 [JOB] در حال جستجو در آرشیو برای محصولات ارسال‌نشده...")
+    unsent = None
     page = 1
     while True:
         batch = await fetch_products({"per_page": 100, "page": page, "orderby": "id", "order": "desc"})
-        if not batch: break
+        if not batch:
+            break
+            
         for p in batch:
             if p.get("stock_status") == "outofstock":
                 out_of_stock.add(p["id"])
                 continue
-            if p["id"] in history: continue
-            unsent.append(p)
+            if p["id"] in history:
+                continue
+            
+            # پیدا کردن اولین محصول ارسال‌نشده (قدیمی‌ترین در لیست نزولی)
+            unsent = p
             break 
-        if unsent: break
+        
+        if unsent:
+            break
         page += 1
-        if page > 100: break
+        if page > 100:
+            break
 
     save_out_of_stock(out_of_stock)
 
-    if not unsent:
-        print("✅ [JOB] همه محصولات (موجود) ارسال شده‌اند.")
+    # ===== ۲. اگر محصولی برای ارسال پیدا شد =====
+    if unsent:
+        print(f"ℹ️ [JOB] قدیمی‌ترین محصول ارسال‌نشده پیدا شد: #{unsent['id']}")
+        success = await format_and_send_product(unsent)
+        if success:
+            history.add(unsent["id"])
+            save_sent_history(history)
+            # آپدیت last_id فقط برای هماهنگی با جدول
+            save_last_id(unsent["id"])
+        else:
+            print("⚠️ [JOB] ارسال ناموفق بود. تلاش بعدی...")
         return
 
-    p = unsent[0]
-    success = await format_and_send_product(p)
-    if success:
-        history.add(p["id"])
-        save_sent_history(history)
-
-async def check_out_of_stock():
-    print("\n📦 [JOB] زمان‌بند هفتگی محصولات ناموجود...")
-    out_of_stock = get_out_of_stock()
-    history = get_sent_history()
-    if not out_of_stock: return
-
-    for p_id in list(out_of_stock):
-        p_data = await fetch_products({"include": p_id})
-        if not p_data: continue
-        p = p_data[0]
-        if p.get("stock_status") != "outofstock" and p["id"] not in history:
-            print(f"🎉 [JOB] محصول #{p['id']} موجود شد! ارسال...")
-            success = await format_and_send_product(p)
-            if success:
-                history.add(p["id"])
-                save_sent_history(history)
-                out_of_stock.discard(p["id"])
-                save_out_of_stock(out_of_stock)
-            await asyncio.sleep(1)
-
-# ===== ربات بله (Polling) =====
-async def bale_polling():
-    print("🤖 [POLLING] حلقه دریافت پیام‌ها شروع شد...")
-    offset = 0
-    base_url = f"https://tapi.bale.ai/bot{BALE_TOKEN}"
-    while True:
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(f"{base_url}/getUpdates", params={"offset": offset}, timeout=15) as resp:
-                    if resp.status == 200:
-                        data = await resp.json()
-                        if data.get("ok"):
-                            for upd in data.get("result", []):
-                                offset = upd["update_id"] + 1
-                                print(f"📩 [POLLING] پیام دریافت شد! ID: {upd['update_id']}")
-                                if "message" in upd:
-                                    msg = upd["message"]
-                                    chat_id = msg["chat"]["id"]
-                                    if msg.get("text") == "/start":
-                                        print(f"👤 [POLLING] /start از {chat_id}")
-                                        keyboard = {"inline_keyboard": [[{"text": "💰 قیمت لحظه‌ای طلا", "callback_data": "get_live_gold"}]]}
-                                        await send_to_bale(chat_id, "سلام! برای دریافت قیمت لحظه‌ای طلا روی دکمه زیر بزنید:", reply_markup=keyboard)
-                                elif "callback_query" in upd:
-                                    cb = upd["callback_query"]
-                                    print(f"🔘 [POLLING] دکمه از {cb['message']['chat']['id']}")
-                                    async with session.post(f"{base_url}/answerCallbackQuery", json={"callback_query_id": cb["id"]}) as ans: pass
-                                    if cb["data"] == "get_live_gold":
-                                        text = await get_gold_price_text()
-                                        keyboard = {"inline_keyboard": [[{"text": "🔄 به‌روزرسانی قیمت", "callback_data": "get_live_gold"}]]}
-                                        await send_to_bale(cb["message"]["chat"]["id"], text, reply_markup=keyboard)
-        except asyncio.TimeoutError: pass
-        except Exception as e: print(f"❌ [POLLING] خطای شبکه: {e}")
-        await asyncio.sleep(2)
-
-# ===== اجرا =====
-async def main():
-    print("🚀 [MAIN] شروع برنامه...")
-    if supabase:
-        print("✅ [MAIN] کلاینت Supabase ساخته شد.")
-    else:
-        print("❌ [MAIN] هشدار: کلاینت Supabase ساخته نشد!")
-
-    if os.environ.get("PORT"):
-        threading.Thread(target=run_web_server, daemon=True).start()
-
-    scheduler = AsyncIOScheduler()
-    scheduler.add_job(send_gold_price, 'interval', minutes=60) 
-    scheduler.add_job(check_and_send_products, 'interval', minutes=10)
-    scheduler.add_job(check_out_of_stock, 'interval', hours=168) 
-    scheduler.start()
-    print("⏰ [MAIN] زمان‌بندها فعال شدند.")
-
-    asyncio.create_task(bale_polling())
-    print("✅ [MAIN] ربات فعال شد.")
-
-    while True:
-        await asyncio.sleep(3600)
-
-if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except Exception as e:
-        print(f"❌ [MAIN] خطای اصلی: {e}")
-        traceback.print_exc()
+    # ===== ۳. اگر همه محصولات ارسال شده بودند =====
+    print("✅ [JOB] همه محصولات (موجود) ارسال شده‌اند. هیچ محصول جدیدی نیست.")
