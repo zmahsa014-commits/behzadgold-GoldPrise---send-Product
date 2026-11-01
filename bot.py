@@ -262,29 +262,11 @@ async def format_and_send_product(p):
 
 async def check_and_send_products():
     print("\n🔍 [JOB] زمان‌بند بررسی محصولات...")
-    last_id = get_last_id()
     history = get_sent_history()
     out_of_stock = get_out_of_stock()
 
-    new_products = await fetch_products({"per_page": 10, "orderby": "id", "order": "desc"})
-    truly_new = [p for p in new_products if p["id"] > last_id and p.get("stock_status") != "outofstock"]
-    
-    if truly_new:
-        print(f"🎉 [JOB] {len(truly_new)} محصول جدید پیدا شد!")
-        truly_new.sort(key=lambda x: x["id"]) 
-        for p in truly_new[:BATCH_SIZE]:
-            success = await format_and_send_product(p)
-            if success:
-                history.add(p["id"])
-                save_last_id(p["id"])
-                save_sent_history(history)
-            else:
-                print("⚠️ [JOB] ارسال ناموفق بود. تلاش بعدی...")
-                return
-        return
-
-    print("⚠️ [JOB] محصول جدیدی نیست. در حال جستجو در آرشیو...")
-    unsent = []
+    print("🔎 [JOB] در حال جستجو در آرشیو برای محصولات ارسال‌نشده...")
+    unsent = None
     page = 1
     while True:
         batch = await fetch_products({"per_page": 100, "page": page, "orderby": "id", "order": "desc"})
@@ -294,7 +276,7 @@ async def check_and_send_products():
                 out_of_stock.add(p["id"])
                 continue
             if p["id"] in history: continue
-            unsent.append(p)
+            unsent = p
             break 
         if unsent: break
         page += 1
@@ -302,15 +284,18 @@ async def check_and_send_products():
 
     save_out_of_stock(out_of_stock)
 
-    if not unsent:
-        print("✅ [JOB] همه محصولات (موجود) ارسال شده‌اند.")
+    if unsent:
+        print(f"ℹ️ [JOB] محصول ارسال‌نشده پیدا شد: #{unsent['id']}")
+        success = await format_and_send_product(unsent)
+        if success:
+            history.add(unsent["id"])
+            save_sent_history(history)
+            save_last_id(unsent["id"])
+        else:
+            print("⚠️ [JOB] ارسال ناموفق بود. تلاش بعدی...")
         return
 
-    p = unsent[0]
-    success = await format_and_send_product(p)
-    if success:
-        history.add(p["id"])
-        save_sent_history(history)
+    print("✅ [JOB] همه محصولات (موجود) ارسال شده‌اند. هیچ محصول جدیدی نیست.")
 
 async def check_out_of_stock():
     print("\n📦 [JOB] زمان‌بند هفتگی محصولات ناموجود...")
