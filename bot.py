@@ -261,48 +261,76 @@ async def format_and_send_product(p):
         return False
 
 async def check_and_send_products():
-    print("\n🔍 [JOB] زمان‌بند بررسی محصولات اجرا شد.")
+    print("\n🔍 [JOB] زمان‌بند بررسی محصولات...")
+    last_id = get_last_id()
     history = get_sent_history()
     out_of_stock = get_out_of_stock()
 
-    print("🔎 [JOB] در حال جستجو در آرشیو برای محصولات ارسال‌نشده...")
-    unsent = None
+    new_products = await fetch_products({"per_page": 10, "orderby": "id", "order": "desc"})
+    truly_new = [p for p in new_products if p["id"] > last_id and p.get("stock_status") != "outofstock"]
+    
+    if truly_new:
+        print(f"🎉 [JOB] {len(truly_new)} محصول جدید پیدا شد!")
+        truly_new.sort(key=lambda x: x["id"]) 
+        for p in truly_new[:BATCH_SIZE]:
+            success = await format_and_send_product(p)
+            if success:
+                history.add(p["id"])
+                save_last_id(p["id"])
+                save_sent_history(history)
+            else:
+                print("⚠️ [JOB] ارسال ناموفق بود. تلاش بعدی...")
+                return
+        return
+
+    print("⚠️ [JOB] محصول جدیدی نیست. در حال جستجو در آرشیو...")
+    unsent = []
     page = 1
     while True:
         batch = await fetch_products({"per_page": 100, "page": page, "orderby": "id", "order": "desc"})
-        if not batch:
-            break
-            
+        if not batch: break
         for p in batch:
             if p.get("stock_status") == "outofstock":
                 out_of_stock.add(p["id"])
                 continue
-            if p["id"] in history:
-                continue
-            
-            unsent = p
+            if p["id"] in history: continue
+            unsent.append(p)
             break 
-        
-        if unsent:
-            break
+        if unsent: break
         page += 1
-        if page > 100:
-            break
+        if page > 100: break
 
     save_out_of_stock(out_of_stock)
 
-    if unsent:
-        print(f"ℹ️ [JOB] قدیمی‌ترین محصول ارسال‌نشده پیدا شد: #{unsent['id']}")
-        success = await format_and_send_product(unsent)
-        if success:
-            history.add(unsent["id"])
-            save_sent_history(history)
-            save_last_id(unsent["id"])
-        else:
-            print("⚠️ [JOB] ارسال ناموفق بود. تلاش بعدی...")
+    if not unsent:
+        print("✅ [JOB] همه محصولات (موجود) ارسال شده‌اند.")
         return
 
-    print("✅ [JOB] همه محصولات (موجود) ارسال شده‌اند. هیچ محصول جدیدی نیست.")
+    p = unsent[0]
+    success = await format_and_send_product(p)
+    if success:
+        history.add(p["id"])
+        save_sent_history(history)
+
+async def check_out_of_stock():
+    print("\n📦 [JOB] زمان‌بند هفتگی محصولات ناموجود...")
+    out_of_stock = get_out_of_stock()
+    history = get_sent_history()
+    if not out_of_stock: return
+
+    for p_id in list(out_of_stock):
+        p_data = await fetch_products({"include": p_id})
+        if not p_data: continue
+        p = p_data[0]
+        if p.get("stock_status") != "outofstock" and p["id"] not in history:
+            print(f"🎉 [JOB] محصول #{p['id']} موجود شد! ارسال...")
+            success = await format_and_send_product(p)
+            if success:
+                history.add(p["id"])
+                save_sent_history(history)
+                out_of_stock.discard(p["id"])
+                save_out_of_stock(out_of_stock)
+            await asyncio.sleep(1)
 
 # ===== ربات بله (Polling) =====
 async def bale_polling():
@@ -359,7 +387,6 @@ async def main():
     asyncio.create_task(bale_polling())
     print("✅ [MAIN] ربات فعال شد.")
 
-    # این حلقه باعث می‌شود برنامه هرگز بسته نشود
     while True:
         await asyncio.sleep(3600)
 
