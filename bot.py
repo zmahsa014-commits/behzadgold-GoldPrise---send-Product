@@ -243,11 +243,9 @@ async def check_and_send_products():
     history = get_sent_history()
     out_of_stock = get_out_of_stock()
 
-    # دریافت کل محصولات (نزولی: جدیدترین‌ها اول)
     all_products = []
     page = 1
     while True:
-        # *** تغییر ۱: اضافه کردن status=publish به درخواست API ***
         batch = await fetch_products({"per_page": 100, "page": page, "orderby": "id", "order": "desc", "status": "publish"})
         if not batch:
             break
@@ -258,13 +256,10 @@ async def check_and_send_products():
 
     print(f"📦 [JOB] در کل {len(all_products)} محصول منتشرشده از سایت دریافت شد.")
 
-    # پیدا کردن محصولات ارسال‌نشده
     unsent = []
     for p in all_products:
-        # *** تغییر ۲: فیلتر کردن محصولاتی که وضعیتشان publish نیست ***
         if p.get("status") != "publish":
             continue
-            
         if p.get("stock_status") == "outofstock":
             out_of_stock.add(p["id"])
             continue
@@ -278,11 +273,7 @@ async def check_and_send_products():
         print("✅ [JOB] همه محصولات موجود قبلاً ارسال شده‌اند. هیچ محصول جدیدی نیست.")
         return
 
-    # انتخاب اولین محصول از لیست ارسال‌نشده‌ها
-    # چون لیست all_products نزولی است (جدیدترین‌ها اول)
-    # اولین عضو unsent، بزرگترین ID (جدیدترین محصول ارسال‌نشده) است.
     selected_product = unsent[0]
-    
     print(f"🌟 [JOB] محصول انتخاب شد: #{selected_product['id']} - {selected_product.get('name')}")
     
     success = await format_and_send_product(selected_product)
@@ -357,11 +348,19 @@ async def main():
         threading.Thread(target=run_web_server, daemon=True).start()
 
     scheduler = AsyncIOScheduler()
-    scheduler.add_job(send_gold_price, 'interval', minutes=180) 
-    scheduler.add_job(check_and_send_products, 'interval', minutes=1)
+    
+    # قیمت طلا: دقیقاً دقیقه 0 هر 2 ساعت (سر ساعت رند)
+    scheduler.add_job(send_gold_price, 'cron', hour='*/3', minute=0)
+    
+    # محصولات: دقیقاً دقیقه 0 هر 2 ساعت (سر ساعت رند)
+    scheduler.add_job(check_and_send_products, 'cron', hour='*/1', minute=0)
+    
+    # بررسی هفتگی ناموجودها
     scheduler.add_job(check_out_of_stock, 'interval', hours=168) 
+    
     scheduler.start()
     print("⏰ [MAIN] زمان‌بندها فعال شدند.")
+    print("ℹ️ [MAIN] قیمت طلا و محصولات هر ۲ ساعت یکبار (سر ساعت رند) ارسال می‌شوند.")
 
     asyncio.create_task(bale_polling())
 
