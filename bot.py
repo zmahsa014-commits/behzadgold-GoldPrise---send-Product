@@ -23,8 +23,6 @@ HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
 }
 
-BATCH_SIZE = 1 
-
 # ===== اتصال به Supabase =====
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
@@ -40,32 +38,10 @@ def home():
 
 def run_web_server():
     port = int(os.environ.get("PORT", 10000))
-    print(f"🌐 [FLASK] وب‌سرور برای بیدار نگه داشتن رندر روی پورت {port} اجرا شد...")
+    print(f"🌐 [FLASK] وب‌سرور روی پورت {port}...")
     app.run(host="0.0.0.0", port=port)
 
 # ===== توابع کمکی ذخیره‌سازی (Supabase) =====
-def get_last_id():
-    if not supabase: return 0
-    try:
-        print("🔍 [DB] در حال خواندن last_id از دیتابیس...")
-        response = supabase.table("last_orders").select("last_order_id").eq("site_name", "behzadgold_bot_last_id").execute()
-        if response.data:
-            val = int(response.data[0]["last_order_id"])
-            print(f"✅ [DB] last_id خوانده شد: {val}")
-            return val
-        return 0
-    except Exception as e:
-        print(f"❌ [DB] خطا در خواندن last_id: {e}")
-        return 0
-
-def save_last_id(p_id):
-    if not supabase: return
-    try:
-        print(f"💾 [DB] در حال ذخیره last_id: {p_id}")
-        supabase.table("last_orders").update({"last_order_id": int(p_id)}).eq("site_name", "behzadgold_bot_last_id").execute()
-    except Exception as e:
-        print(f"❌ [DB] خطا در ذخیره last_id: {e}")
-
 def get_sent_history():
     if not supabase: return set()
     try:
@@ -261,41 +237,50 @@ async def format_and_send_product(p):
         return False
 
 async def check_and_send_products():
-    print("\n🔍 [JOB] زمان‌بند بررسی محصولات...")
+    print("\n🔍 [JOB] بررسی محصولات...")
     history = get_sent_history()
     out_of_stock = get_out_of_stock()
 
-    print("🔎 [JOB] در حال جستجو در آرشیو برای محصولات ارسال‌نشده...")
-    unsent = None
+    all_products = []
     page = 1
+    # گرفتن همه محصولات از API (به صورت صفحه به صفحه)
     while True:
-        batch = await fetch_products({"per_page": 100, "page": page, "orderby": "id", "order": "desc"})
-        if not batch: break
-        for p in batch:
-            if p.get("stock_status") == "outofstock":
-                out_of_stock.add(p["id"])
-                continue
-            if p["id"] in history: continue
-            unsent = p
-            break 
-        if unsent: break
+        batch = await fetch_products({"per_page": 100, "page": page, "orderby": "id", "order": "asc"}) # از قدیمی به جدید
+        if not batch:
+            break
+        all_products.extend(batch)
         page += 1
-        if page > 100: break
+        if page > 50: # محدودیت برای جلوگیری از لوپ بی‌نهایت
+            break
+
+    print(f"📦 [JOB] در کل {len(all_products)} محصول از سایت دریافت شد.")
+
+    unsent = []
+    for p in all_products:
+        if p.get("stock_status") == "outofstock":
+            out_of_stock.add(p["id"])
+            continue
+        if p["id"] in history:
+            continue
+        unsent.append(p)
 
     save_out_of_stock(out_of_stock)
 
-    if unsent:
-        print(f"ℹ️ [JOB] محصول ارسال‌نشده پیدا شد: #{unsent['id']}")
-        success = await format_and_send_product(unsent)
-        if success:
-            history.add(unsent["id"])
-            save_sent_history(history)
-            save_last_id(unsent["id"])
-        else:
-            print("⚠️ [JOB] ارسال ناموفق بود. تلاش بعدی...")
+    if not unsent:
+        print("✅ [JOB] همه محصولات موجود قبلاً ارسال شده‌اند. هیچ محصول جدیدی نیست.")
         return
 
-    print("✅ [JOB] همه محصولات (موجود) ارسال شده‌اند. هیچ محصول جدیدی نیست.")
+    # ارسال قدیمی‌ترین محصول ارسال‌نشده
+    p = unsent[0]
+    print(f"ℹ️ [JOB] محصول ارسال‌نشده پیدا شد: #{p['id']}")
+    success = await format_and_send_product(p)
+    
+    if success:
+        history.add(p["id"])
+        save_sent_history(history)
+        print(f"✅ [JOB] محصول #{p['id']} با موفقیت ارسال و در تاریخچه ذخیره شد.")
+    else:
+        print("⚠️ [JOB] ارسال ناموفق بود. در نوبت بعدی دوباره تلاش می‌شود.")
 
 async def check_out_of_stock():
     print("\n📦 [JOB] زمان‌بند هفتگی محصولات ناموجود...")
@@ -331,17 +316,14 @@ async def bale_polling():
                         if data.get("ok"):
                             for upd in data.get("result", []):
                                 offset = upd["update_id"] + 1
-                                print(f"📩 [POLLING] پیام دریافت شد! ID: {upd['update_id']}")
                                 if "message" in upd:
                                     msg = upd["message"]
                                     chat_id = msg["chat"]["id"]
                                     if msg.get("text") == "/start":
-                                        print(f"👤 [POLLING] /start از {chat_id}")
                                         keyboard = {"inline_keyboard": [[{"text": "💰 قیمت لحظه‌ای طلا", "callback_data": "get_live_gold"}]]}
                                         await send_to_bale(chat_id, "سلام! برای دریافت قیمت لحظه‌ای طلا روی دکمه زیر بزنید:", reply_markup=keyboard)
                                 elif "callback_query" in upd:
                                     cb = upd["callback_query"]
-                                    print(f"🔘 [POLLING] دکمه از {cb['message']['chat']['id']}")
                                     async with session.post(f"{base_url}/answerCallbackQuery", json={"callback_query_id": cb["id"]}) as ans: pass
                                     if cb["data"] == "get_live_gold":
                                         text = await get_gold_price_text()
@@ -370,7 +352,6 @@ async def main():
     print("⏰ [MAIN] زمان‌بندها فعال شدند.")
 
     asyncio.create_task(bale_polling())
-    print("✅ [MAIN] ربات فعال شد.")
 
     while True:
         await asyncio.sleep(3600)
