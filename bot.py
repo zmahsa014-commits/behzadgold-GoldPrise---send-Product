@@ -48,8 +48,7 @@ def get_sent_history():
         print("🔍 [DB] در حال خواندن تاریخچه ارسال...")
         response = supabase.table("last_orders").select("sent_history").eq("site_name", "behzadgold_bot_sent_history").execute()
         if response.data and response.data[0].get("sent_history"):
-            history_str = response.data[0]["sent_history"]
-            data = set(json.loads(history_str))
+            data = set(json.loads(str(response.data[0]["sent_history"])))
             print(f"✅ [DB] تاریخچه خوانده شد. تعداد: {len(data)}")
             return data
         return set()
@@ -61,7 +60,6 @@ def save_sent_history(history_set):
     if not supabase: return
     try:
         print(f"💾 [DB] در حال ذخیره تاریخچه. تعداد: {len(history_set)}")
-        # تبدیل به رشته متنی (JSON String) برای جلوگیری از خطای دیتابیس
         history_str = json.dumps(list(history_set))
         supabase.table("last_orders").update({"sent_history": history_str}).eq("site_name", "behzadgold_bot_sent_history").execute()
     except Exception as e:
@@ -73,8 +71,7 @@ def get_out_of_stock():
         print("🔍 [DB] در حال خواندن لیست ناموجودها...")
         response = supabase.table("last_orders").select("sent_history").eq("site_name", "behzadgold_bot_out_of_stock").execute()
         if response.data and response.data[0].get("sent_history"):
-            history_str = response.data[0]["sent_history"]
-            data = set(json.loads(history_str))
+            data = set(json.loads(str(response.data[0]["sent_history"])))
             print(f"✅ [DB] لیست ناموجودها خوانده شد. تعداد: {len(data)}")
             return data
         return set()
@@ -246,7 +243,7 @@ async def check_and_send_products():
     history = get_sent_history()
     out_of_stock = get_out_of_stock()
 
-    # دریافت کل محصولات
+    # دریافت کل محصولات (نزولی: جدیدترین‌ها اول)
     all_products = []
     page = 1
     while True:
@@ -255,11 +252,12 @@ async def check_and_send_products():
             break
         all_products.extend(batch)
         page += 1
-        if page > 20: # فرض بر این است که بیش از 2000 محصول ندارید
+        if page > 20: # محدودیت برای جلوگیری از لوپ بی‌نهایت
             break
 
     print(f"📦 [JOB] در کل {len(all_products)} محصول از سایت دریافت شد.")
 
+    # پیدا کردن محصولات ارسال‌نشده
     unsent = []
     for p in all_products:
         if p.get("stock_status") == "outofstock":
@@ -275,18 +273,50 @@ async def check_and_send_products():
         print("✅ [JOB] همه محصولات موجود قبلاً ارسال شده‌اند. هیچ محصول جدیدی نیست.")
         return
 
-    # برای اینکه از قدیمی ترین شروع کند، لیست را برعکس (صعودی) می‌کنیم
-    unsent.sort(key=lambda x: x["id"]) 
+    # ===== اولویت‌بندی =====
+    # تمام محصولات ارسال‌نشده در لیست unsent هستند و از قبل نزولی مرتب شده‌اند (جدید به قدیم)
     
-    p = unsent[0]
-    print(f"ℹ️ [JOB] محصول ارسال‌نشده پیدا شد: #{p['id']} - {p['name']}")
+    # ۱. پیدا کردن قدیمی‌ترین محصول ارسال‌نشده (آخرین عضو لیست unsent)
+    # این محصول، مرز بین "محصولات آرشیوی" و "محصولات جدید" است.
+    # هر محصولی که ID آن از این بزرگتر باشد، یک محصول جدید است.
+    oldest_unsent_id = unsent[-1]["id"]
     
-    success = await format_and_send_product(p)
+    # ۲. جدا کردن محصولات جدید (صف اولویت‌دار) و محصولات آرشیوی
+    new_products = []
+    archive_products = []
+    
+    # چون لیست unsent نزولی است، محصولات با ID بالاتر (جدیدتر) در ابتدای لیست هستند
+    for p in unsent:
+        if p["id"] > oldest_unsent_id:
+            # این محصول جدیدتر از قدیمی‌ترین محصول ارسال‌نشده است، پس جزء صف جدید است
+            new_products.append(p)
+        else:
+            # این محصول، همان قدیمی‌ترین یا قدیمی‌تر است (آرشیو)
+            archive_products.append(p)
+
+    # ۳. انتخاب محصول برای ارسال
+    selected_product = None
+    
+    if new_products:
+        # اگر محصول جدیدی وجود دارد، اولویت با آن‌هاست.
+        # چون لیست نزولی است، آخرین عضو new_products قدیمی‌ترینِ محصولاتِ جدید است.
+        # ما آن را انتخاب می‌کنیم تا ترتیب ارسال جدیدها هم رعایت شود (از قدیم به جدید در بین خودشان)
+        selected_product = new_products[-1]
+        print(f"🌟 [JOB] محصول جدید در صف پیدا شد: #{selected_product['id']}")
+    else:
+        # اگر محصول جدیدی نیست، به سراغ آرشیو می‌رویم.
+        # لیست archive_products نزولی است (جدیدترینِ آرشیو اول است). ما اولین عضو (جدیدترین آرشیو) را انتخاب می‌کنیم.
+        selected_product = archive_products[0]
+        print(f"📦 [JOB] محصول آرشیوی پیدا شد: #{selected_product['id']}")
+
+    # ۴. ارسال محصول انتخاب شده
+    print(f"✉️ [JOB] در حال ارسال محصول #{selected_product['id']} - {selected_product.get('name')}")
+    success = await format_and_send_product(selected_product)
     
     if success:
-        history.add(p["id"])
+        history.add(selected_product["id"])
         save_sent_history(history)
-        print(f"✅ [JOB] محصول #{p['id']} با موفقیت ارسال و در تاریخچه ذخیره شد.")
+        print(f"✅ [JOB] محصول #{selected_product['id']} با موفقیت ارسال و در تاریخچه ذخیره شد.")
     else:
         print("⚠️ [JOB] ارسال ناموفق بود. در نوبت بعدی دوباره تلاش می‌شود.")
 
