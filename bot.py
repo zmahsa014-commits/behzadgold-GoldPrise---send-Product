@@ -252,12 +252,11 @@ async def check_and_send_products():
             break
         all_products.extend(batch)
         page += 1
-        if page > 20: # محدودیت برای جلوگیری از لوپ بی‌نهایت
+        if page > 20:
             break
 
     print(f"📦 [JOB] در کل {len(all_products)} محصول از سایت دریافت شد.")
 
-    # پیدا کردن محصولات ارسال‌نشده
     unsent = []
     for p in all_products:
         if p.get("stock_status") == "outofstock":
@@ -273,41 +272,29 @@ async def check_and_send_products():
         print("✅ [JOB] همه محصولات موجود قبلاً ارسال شده‌اند. هیچ محصول جدیدی نیست.")
         return
 
-    # ===== اولویت‌بندی =====
+    # ===== منطق اولویت‌بندی جدید =====
     # تمام محصولات ارسال‌نشده در لیست unsent هستند و از قبل نزولی مرتب شده‌اند (جدید به قدیم)
     
-    # ۱. پیدا کردن قدیمی‌ترین محصول ارسال‌نشده (آخرین عضو لیست unsent)
-    # این محصول، مرز بین "محصولات آرشیوی" و "محصولات جدید" است.
-    # هر محصولی که ID آن از این بزرگتر باشد، یک محصول جدید است.
-    oldest_unsent_id = unsent[-1]["id"]
+    # ۱. بزرگترین ID در کل محصولات (جدیدترین محصول)
+    max_id = all_products[0]["id"]
     
-    # ۲. جدا کردن محصولات جدید (صف اولویت‌دار) و محصولات آرشیوی
-    new_products = []
-    archive_products = []
-    
-    # چون لیست unsent نزولی است، محصولات با ID بالاتر (جدیدتر) در ابتدای لیست هستند
-    for p in unsent:
-        if p["id"] > oldest_unsent_id:
-            # این محصول جدیدتر از قدیمی‌ترین محصول ارسال‌نشده است، پس جزء صف جدید است
-            new_products.append(p)
-        else:
-            # این محصول، همان قدیمی‌ترین یا قدیمی‌تر است (آرشیو)
-            archive_products.append(p)
+    # ۲. بزرگترین ID در محصولات ارسال‌شده (آخرین محصولی که ارسال شده)
+    last_sent_id = max(history) if history else 0
 
-    # ۳. انتخاب محصول برای ارسال
     selected_product = None
-    
-    if new_products:
-        # اگر محصول جدیدی وجود دارد، اولویت با آن‌هاست.
-        # چون لیست نزولی است، آخرین عضو new_products قدیمی‌ترینِ محصولاتِ جدید است.
-        # ما آن را انتخاب می‌کنیم تا ترتیب ارسال جدیدها هم رعایت شود (از قدیم به جدید در بین خودشان)
-        selected_product = new_products[-1]
-        print(f"🌟 [JOB] محصول جدید در صف پیدا شد: #{selected_product['id']}")
+
+    if last_sent_id > 0 and max_id > last_sent_id:
+        # اگر محصولی با ID بالاتر از آخرین ارسال وجود دارد، یعنی محصول جدیدی اضافه شده
+        # ما باید قدیمی‌ترین محصول در بین محصولات جدید را اول بفرستیم (برای اینکه ترتیب جدیدها رعایت شود)
+        new_products = [p for p in unsent if p["id"] > last_sent_id]
+        # لیست new_products نزولی است، پس آخرین عضو آن قدیمی‌ترین محصول جدید است
+        selected_product = new_products[-1] 
+        print(f"🌟 [JOB] محصول جدید (اولویت اول) پیدا شد: #{selected_product['id']}")
     else:
         # اگر محصول جدیدی نیست، به سراغ آرشیو می‌رویم.
-        # لیست archive_products نزولی است (جدیدترینِ آرشیو اول است). ما اولین عضو (جدیدترین آرشیو) را انتخاب می‌کنیم.
-        selected_product = archive_products[0]
-        print(f"📦 [JOB] محصول آرشیوی پیدا شد: #{selected_product['id']}")
+        # لیست unsent نزولی است. ما اولین عضو (بزرگترین ID در آرشیو) را انتخاب می‌کنیم.
+        selected_product = unsent[0]
+        print(f"📦 [JOB] محصول آرشیوی (اولویت دوم) پیدا شد: #{selected_product['id']}")
 
     # ۴. ارسال محصول انتخاب شده
     print(f"✉️ [JOB] در حال ارسال محصول #{selected_product['id']} - {selected_product.get('name')}")
@@ -383,7 +370,7 @@ async def main():
         threading.Thread(target=run_web_server, daemon=True).start()
 
     scheduler = AsyncIOScheduler()
-    scheduler.add_job(send_gold_price, 'interval', minutes=120) 
+    scheduler.add_job(send_gold_price, 'interval', minutes=1) 
     scheduler.add_job(check_and_send_products, 'interval', minutes=1)
     scheduler.add_job(check_out_of_stock, 'interval', hours=168) 
     scheduler.start()
