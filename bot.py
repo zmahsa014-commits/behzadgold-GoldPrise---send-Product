@@ -257,6 +257,7 @@ async def check_and_send_products():
 
     print(f"📦 [JOB] در کل {len(all_products)} محصول از سایت دریافت شد.")
 
+    # پیدا کردن محصولات ارسال‌نشده
     unsent = []
     for p in all_products:
         if p.get("stock_status") == "outofstock":
@@ -272,47 +273,21 @@ async def check_and_send_products():
         print("✅ [JOB] همه محصولات موجود قبلاً ارسال شده‌اند. هیچ محصول جدیدی نیست.")
         return
 
-    # ===== منطق اولویت‌بندی =====
-    # ۱. بزرگترین ID در محصولات ارسال‌شده
-    last_sent_id = max(history) if history else 0
-
-    # جدا کردن محصولات جدید و آرشیوی
-    new_products = []
-    archive_products = []
+    # انتخاب اولین محصول از لیست ارسال‌نشده‌ها
+    # چون لیست all_products نزولی است (جدیدترین‌ها اول)
+    # اولین عضو unsent، بزرگترین ID (جدیدترین محصول ارسال‌نشده) است.
+    selected_product = unsent[0]
     
-    for p in unsent:
-        if p["id"] > last_sent_id:
-            new_products.append(p)
-        else:
-            archive_products.append(p)
-
-    selected_product = None
-
-    if new_products:
-        # اگر محصول جدیدی وجود دارد (ID بزرگتر از آخرین ارسال)، اولویت با آن‌هاست.
-        # چون لیست unsent نزولی است، آخرین عضو new_products قدیمی‌ترینِ جدیدهاست.
-        # ما آن را انتخاب می‌کنیم تا ترتیب جدیدها هم رعایت شود.
-        selected_product = new_products[-1]
-        print(f"🌟 [JOB] محصول جدید (اولویت اول) پیدا شد: #{selected_product['id']}")
-    elif archive_products:
-        # اگر محصول جدیدی نیست، به سراغ آرشیو می‌رویم.
-        # لیست archive_products از قبل نزولی است. اولین عضو، بزرگترین ID در آرشیو است.
-        selected_product = archive_products[0]
-        print(f"📦 [JOB] محصول آرشیوی (اولویت دوم) پیدا شد: #{selected_product['id']}")
-
-    if not selected_product:
-        return
-
-    # ارسال محصول انتخاب شده
-    print(f"✉️ [JOB] در حال ارسال محصول #{selected_product['id']} - {selected_product.get('name')}")
+    print(f"🌟 [JOB] محصول انتخاب شد: #{selected_product['id']} - {selected_product.get('name')}")
+    
     success = await format_and_send_product(selected_product)
     
     if success:
         history.add(selected_product["id"])
         save_sent_history(history)
-        print(f"✅ [JOB] محصول #{selected_product['id']} با موفقیت ارسال و در تاریخچه ذخیره شد.")
+        print(f"✅ [JOB] محصول #{selected_product['id']} با موفقیت ارسال شد.")
     else:
-        print("⚠️ [JOB] ارسال ناموفق بود. در نوبت بعدی دوباره تلاش می‌شود.")
+        print("⚠️ [JOB] ارسال ناموفق بود. تلاش بعدی...")
 
 async def check_out_of_stock():
     print("\n📦 [JOB] زمان‌بند هفتگی محصولات ناموجود...")
