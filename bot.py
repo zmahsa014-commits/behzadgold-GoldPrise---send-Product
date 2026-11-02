@@ -247,7 +247,8 @@ async def check_and_send_products():
     all_products = []
     page = 1
     while True:
-        batch = await fetch_products({"per_page": 100, "page": page, "orderby": "id", "order": "desc"})
+        # *** تغییر ۱: اضافه کردن status=publish به درخواست API ***
+        batch = await fetch_products({"per_page": 100, "page": page, "orderby": "id", "order": "desc", "status": "publish"})
         if not batch:
             break
         all_products.extend(batch)
@@ -255,11 +256,15 @@ async def check_and_send_products():
         if page > 20:
             break
 
-    print(f"📦 [JOB] در کل {len(all_products)} محصول از سایت دریافت شد.")
+    print(f"📦 [JOB] در کل {len(all_products)} محصول منتشرشده از سایت دریافت شد.")
 
     # پیدا کردن محصولات ارسال‌نشده
     unsent = []
     for p in all_products:
+        # *** تغییر ۲: فیلتر کردن محصولاتی که وضعیتشان publish نیست ***
+        if p.get("status") != "publish":
+            continue
+            
         if p.get("stock_status") == "outofstock":
             out_of_stock.add(p["id"])
             continue
@@ -296,7 +301,7 @@ async def check_out_of_stock():
     if not out_of_stock: return
 
     for p_id in list(out_of_stock):
-        p_data = await fetch_products({"include": p_id})
+        p_data = await fetch_products({"include": p_id, "status": "publish"})
         if not p_data: continue
         p = p_data[0]
         if p.get("stock_status") != "outofstock" and p["id"] not in history:
