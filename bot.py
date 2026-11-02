@@ -272,31 +272,38 @@ async def check_and_send_products():
         print("✅ [JOB] همه محصولات موجود قبلاً ارسال شده‌اند. هیچ محصول جدیدی نیست.")
         return
 
-    # ===== منطق اولویت‌بندی جدید =====
-    # تمام محصولات ارسال‌نشده در لیست unsent هستند و از قبل نزولی مرتب شده‌اند (جدید به قدیم)
-    
-    # ۱. بزرگترین ID در کل محصولات (جدیدترین محصول)
-    max_id = all_products[0]["id"]
-    
-    # ۲. بزرگترین ID در محصولات ارسال‌شده (آخرین محصولی که ارسال شده)
+    # ===== منطق اولویت‌بندی =====
+    # ۱. بزرگترین ID در محصولات ارسال‌شده
     last_sent_id = max(history) if history else 0
+
+    # جدا کردن محصولات جدید و آرشیوی
+    new_products = []
+    archive_products = []
+    
+    for p in unsent:
+        if p["id"] > last_sent_id:
+            new_products.append(p)
+        else:
+            archive_products.append(p)
 
     selected_product = None
 
-    if last_sent_id > 0 and max_id > last_sent_id:
-        # اگر محصولی با ID بالاتر از آخرین ارسال وجود دارد، یعنی محصول جدیدی اضافه شده
-        # ما باید قدیمی‌ترین محصول در بین محصولات جدید را اول بفرستیم (برای اینکه ترتیب جدیدها رعایت شود)
-        new_products = [p for p in unsent if p["id"] > last_sent_id]
-        # لیست new_products نزولی است، پس آخرین عضو آن قدیمی‌ترین محصول جدید است
-        selected_product = new_products[-1] 
+    if new_products:
+        # اگر محصول جدیدی وجود دارد (ID بزرگتر از آخرین ارسال)، اولویت با آن‌هاست.
+        # چون لیست unsent نزولی است، آخرین عضو new_products قدیمی‌ترینِ جدیدهاست.
+        # ما آن را انتخاب می‌کنیم تا ترتیب جدیدها هم رعایت شود.
+        selected_product = new_products[-1]
         print(f"🌟 [JOB] محصول جدید (اولویت اول) پیدا شد: #{selected_product['id']}")
-    else:
+    elif archive_products:
         # اگر محصول جدیدی نیست، به سراغ آرشیو می‌رویم.
-        # لیست unsent نزولی است. ما اولین عضو (بزرگترین ID در آرشیو) را انتخاب می‌کنیم.
-        selected_product = unsent[0]
+        # لیست archive_products از قبل نزولی است. اولین عضو، بزرگترین ID در آرشیو است.
+        selected_product = archive_products[0]
         print(f"📦 [JOB] محصول آرشیوی (اولویت دوم) پیدا شد: #{selected_product['id']}")
 
-    # ۴. ارسال محصول انتخاب شده
+    if not selected_product:
+        return
+
+    # ارسال محصول انتخاب شده
     print(f"✉️ [JOB] در حال ارسال محصول #{selected_product['id']} - {selected_product.get('name')}")
     success = await format_and_send_product(selected_product)
     
