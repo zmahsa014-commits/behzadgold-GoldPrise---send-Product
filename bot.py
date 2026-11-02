@@ -370,7 +370,7 @@ async def main():
         threading.Thread(target=run_web_server, daemon=True).start()
 
     scheduler = AsyncIOScheduler()
-    scheduler.add_job(send_gold_price, 'interval', minutes=1) 
+    scheduler.add_job(send_gold_price, 'interval', minutes=180) 
     scheduler.add_job(check_and_send_products, 'interval', minutes=1)
     scheduler.add_job(check_out_of_stock, 'interval', hours=168) 
     scheduler.start()
