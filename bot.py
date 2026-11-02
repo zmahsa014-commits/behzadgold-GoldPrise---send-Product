@@ -46,9 +46,10 @@ def get_sent_history():
     if not supabase: return set()
     try:
         print("🔍 [DB] در حال خواندن تاریخچه ارسال...")
-        response = supabase.table("last_orders").select("last_order_id").eq("site_name", "behzadgold_bot_sent_history").execute()
-        if response.data and response.data[0]["last_order_id"] != 0:
-            data = set(json.loads(str(response.data[0]["last_order_id"])))
+        response = supabase.table("last_orders").select("sent_history").eq("site_name", "behzadgold_bot_sent_history").execute()
+        if response.data and response.data[0].get("sent_history"):
+            history_str = response.data[0]["sent_history"]
+            data = set(json.loads(history_str))
             print(f"✅ [DB] تاریخچه خوانده شد. تعداد: {len(data)}")
             return data
         return set()
@@ -60,7 +61,9 @@ def save_sent_history(history_set):
     if not supabase: return
     try:
         print(f"💾 [DB] در حال ذخیره تاریخچه. تعداد: {len(history_set)}")
-        supabase.table("last_orders").update({"last_order_id": json.dumps(list(history_set))}).eq("site_name", "behzadgold_bot_sent_history").execute()
+        # تبدیل به رشته متنی (JSON String) برای جلوگیری از خطای دیتابیس
+        history_str = json.dumps(list(history_set))
+        supabase.table("last_orders").update({"sent_history": history_str}).eq("site_name", "behzadgold_bot_sent_history").execute()
     except Exception as e:
         print(f"❌ [DB] خطا در ذخیره تاریخچه: {e}")
 
@@ -68,9 +71,10 @@ def get_out_of_stock():
     if not supabase: return set()
     try:
         print("🔍 [DB] در حال خواندن لیست ناموجودها...")
-        response = supabase.table("last_orders").select("last_order_id").eq("site_name", "behzadgold_bot_out_of_stock").execute()
-        if response.data and response.data[0]["last_order_id"] != 0:
-            data = set(json.loads(str(response.data[0]["last_order_id"])))
+        response = supabase.table("last_orders").select("sent_history").eq("site_name", "behzadgold_bot_out_of_stock").execute()
+        if response.data and response.data[0].get("sent_history"):
+            history_str = response.data[0]["sent_history"]
+            data = set(json.loads(history_str))
             print(f"✅ [DB] لیست ناموجودها خوانده شد. تعداد: {len(data)}")
             return data
         return set()
@@ -82,7 +86,8 @@ def save_out_of_stock(out_set):
     if not supabase: return
     try:
         print(f"💾 [DB] در حال ذخیره لیست ناموجودها. تعداد: {len(out_set)}")
-        supabase.table("last_orders").update({"last_order_id": json.dumps(list(out_set))}).eq("site_name", "behzadgold_bot_out_of_stock").execute()
+        history_str = json.dumps(list(out_set))
+        supabase.table("last_orders").update({"sent_history": history_str}).eq("site_name", "behzadgold_bot_out_of_stock").execute()
     except Exception as e:
         print(f"❌ [DB] خطا در ذخیره لیست ناموجودها: {e}")
 
@@ -241,16 +246,16 @@ async def check_and_send_products():
     history = get_sent_history()
     out_of_stock = get_out_of_stock()
 
+    # دریافت کل محصولات
     all_products = []
     page = 1
-    # گرفتن همه محصولات از API (به صورت صفحه به صفحه)
     while True:
-        batch = await fetch_products({"per_page": 100, "page": page, "orderby": "id", "order": "asc"}) # از قدیمی به جدید
+        batch = await fetch_products({"per_page": 100, "page": page, "orderby": "id", "order": "desc"})
         if not batch:
             break
         all_products.extend(batch)
         page += 1
-        if page > 50: # محدودیت برای جلوگیری از لوپ بی‌نهایت
+        if page > 20: # فرض بر این است که بیش از 2000 محصول ندارید
             break
 
     print(f"📦 [JOB] در کل {len(all_products)} محصول از سایت دریافت شد.")
@@ -270,9 +275,12 @@ async def check_and_send_products():
         print("✅ [JOB] همه محصولات موجود قبلاً ارسال شده‌اند. هیچ محصول جدیدی نیست.")
         return
 
-    # ارسال قدیمی‌ترین محصول ارسال‌نشده
+    # برای اینکه از قدیمی ترین شروع کند، لیست را برعکس (صعودی) می‌کنیم
+    unsent.sort(key=lambda x: x["id"]) 
+    
     p = unsent[0]
-    print(f"ℹ️ [JOB] محصول ارسال‌نشده پیدا شد: #{p['id']}")
+    print(f"ℹ️ [JOB] محصول ارسال‌نشده پیدا شد: #{p['id']} - {p['name']}")
+    
     success = await format_and_send_product(p)
     
     if success:
