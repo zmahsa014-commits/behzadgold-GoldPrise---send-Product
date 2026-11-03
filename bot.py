@@ -6,6 +6,7 @@ import aiohttp
 import json
 import threading
 import traceback
+import pytz
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from flask import Flask
 from supabase import create_client, Client
@@ -347,20 +348,24 @@ async def main():
     if os.environ.get("PORT"):
         threading.Thread(target=run_web_server, daemon=True).start()
 
-    scheduler = AsyncIOScheduler()
+    # تعریف منطقه زمانی تهران
+    tehran_tz = pytz.timezone('Asia/Tehran')
     
-    # قیمت طلا: دقیقاً دقیقه 0 هر 2 ساعت (سر ساعت رند)
-    scheduler.add_job(send_gold_price, 'cron', hour='*/3', minute=0)
+    # ساختن زمان‌بند با منطقه زمانی تهران
+    scheduler = AsyncIOScheduler(timezone=tehran_tz)
     
-    # محصولات: دقیقاً دقیقه 0 هر 2 ساعت (سر ساعت رند)
-    scheduler.add_job(check_and_send_products, 'cron', hour='*/1', minute=0)
+    # قیمت طلا: فقط از ساعت 9 صبح تا 11 شب، هر 2 ساعت یکبار سر ساعت رند
+    scheduler.add_job(send_gold_price, 'cron', hour='9-23/2', minute=0)
+    
+    # محصولات: فقط از ساعت 9 صبح تا 11 شب، هر 2 ساعت یکبار سر ساعت رند
+    scheduler.add_job(check_and_send_products, 'cron', hour='9-23/1', minute=0)
     
     # بررسی هفتگی ناموجودها
     scheduler.add_job(check_out_of_stock, 'interval', hours=168) 
     
     scheduler.start()
     print("⏰ [MAIN] زمان‌بندها فعال شدند.")
-    print("ℹ️ [MAIN] قیمت طلا و محصولات هر ۲ ساعت یکبار (سر ساعت رند) ارسال می‌شوند.")
+    print("ℹ️ [MAIN] ارسال‌ها فقط بین ساعت ۹ صبح تا ۱۱ شب (به وقت تهران) انجام می‌شوند.")
 
     asyncio.create_task(bale_polling())
 
