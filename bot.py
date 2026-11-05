@@ -347,7 +347,7 @@ async def bale_polling():
                                         keyboard = {"inline_keyboard": [[{"text": "🔄 به‌روزرسانی قیمت", "callback_data": "get_live_gold"}]]}
                                         await send_to_bale(cb["message"]["chat"]["id"], text, reply_markup=keyboard, title="قیمت طلا (دکمه)")
         except asyncio.TimeoutError: pass
-        except Exception as e: pass # خطاهای شبکه Polling رو نادیده می‌گیریم
+        except Exception as e: pass
         await asyncio.sleep(2)
 
 # ===== اجرا =====
@@ -358,10 +358,19 @@ async def main():
     tehran_tz = pytz.timezone('Asia/Tehran')
     scheduler = AsyncIOScheduler(timezone=tehran_tz)
     
-    zamanbandi = '9-23/3'
+    # ==========================================================
+    # تنظیم زمان‌بندی مستقل برای قیمت طلا و محصولات
+    # ==========================================================
     
-    scheduler.add_job(send_gold_price, 'cron', hour=zamanbandi, minute=0)
-    scheduler.add_job(check_and_send_products, 'cron', hour=zamanbandi, minute=0)
+    # بازه ارسال قیمت طلا (اینجا: هر 3 ساعت، از 9 صبح تا 11 شب)
+    zamanbandi_price = '8-23/3'  
+    
+    # بازه ارسال محصولات (اینجا: هر 1 ساعت، از 9 صبح تا 11 شب)
+    zamanbandi_product = '8-23/1' 
+    
+    # اضافه کردن تسک‌ها به زمان‌بند
+    scheduler.add_job(send_gold_price, 'cron', hour=zamanbandi_price, minute=0)
+    scheduler.add_job(check_and_send_products, 'cron', hour=zamanbandi_product, minute=0)
     scheduler.add_job(check_out_of_stock, 'interval', hours=168) 
     
     scheduler.start()
