@@ -20,6 +20,10 @@ BALE_TOKEN = os.environ.get("BALE_TOKEN")
 BALE_CHANNEL = os.environ.get("BALE_CHANNEL")
 PRICE_JSON_URL = os.environ.get("PRICE_JSON_URL")
 
+# ===== تنظیمات تلگرام =====
+TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
+
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
 }
@@ -39,59 +43,47 @@ def home():
 
 def run_web_server():
     port = int(os.environ.get("PORT", 10000))
-    print(f"🌐 [FLASK] وب‌سرور روی پورت {port}...")
     app.run(host="0.0.0.0", port=port)
 
 # ===== توابع کمکی ذخیره‌سازی (Supabase) =====
 def get_sent_history():
     if not supabase: return set()
     try:
-        print("🔍 [DB] در حال خواندن تاریخچه ارسال...")
         response = supabase.table("last_orders").select("sent_history").eq("site_name", "behzadgold_bot_sent_history").execute()
         if response.data and response.data[0].get("sent_history"):
-            data = set(json.loads(str(response.data[0]["sent_history"])))
-            print(f"✅ [DB] تاریخچه خوانده شد. تعداد: {len(data)}")
-            return data
+            return set(json.loads(str(response.data[0]["sent_history"])))
         return set()
-    except Exception as e:
-        print(f"❌ [DB] خطا در خواندن تاریخچه: {e}")
+    except:
         return set()
 
 def save_sent_history(history_set):
     if not supabase: return
     try:
-        print(f"💾 [DB] در حال ذخیره تاریخچه. تعداد: {len(history_set)}")
         history_str = json.dumps(list(history_set))
         supabase.table("last_orders").update({"sent_history": history_str}).eq("site_name", "behzadgold_bot_sent_history").execute()
-    except Exception as e:
-        print(f"❌ [DB] خطا در ذخیره تاریخچه: {e}")
+    except:
+        pass
 
 def get_out_of_stock():
     if not supabase: return set()
     try:
-        print("🔍 [DB] در حال خواندن لیست ناموجودها...")
         response = supabase.table("last_orders").select("sent_history").eq("site_name", "behzadgold_bot_out_of_stock").execute()
         if response.data and response.data[0].get("sent_history"):
-            data = set(json.loads(str(response.data[0]["sent_history"])))
-            print(f"✅ [DB] لیست ناموجودها خوانده شد. تعداد: {len(data)}")
-            return data
+            return set(json.loads(str(response.data[0]["sent_history"])))
         return set()
-    except Exception as e:
-        print(f"❌ [DB] خطا در خواندن لیست ناموجودها: {e}")
+    except:
         return set()
 
 def save_out_of_stock(out_set):
     if not supabase: return
     try:
-        print(f"💾 [DB] در حال ذخیره لیست ناموجودها. تعداد: {len(out_set)}")
         history_str = json.dumps(list(out_set))
         supabase.table("last_orders").update({"sent_history": history_str}).eq("site_name", "behzadgold_bot_out_of_stock").execute()
-    except Exception as e:
-        print(f"❌ [DB] خطا در ذخیره لیست ناموجودها: {e}")
+    except:
+        pass
 
-# ===== ارسال پیام =====
-async def send_to_bale(chat_id, text, photo_url=None, reply_markup=None):
-    print(f"✉️ [BALE] در حال ارسال پیام به {chat_id}...")
+# ===== ارسال به بله با تلاش نامحدود =====
+async def send_to_bale(chat_id, text, photo_url=None, reply_markup=None, title=""):
     base_url = f"https://tapi.bale.ai/bot{BALE_TOKEN}"
     data = {"chat_id": chat_id}
     if photo_url:
@@ -104,20 +96,54 @@ async def send_to_bale(chat_id, text, photo_url=None, reply_markup=None):
     if reply_markup: 
         data["reply_markup"] = reply_markup
 
-    for attempt in range(3):
+    while True: # تلاش نامحدود
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.post(url, json=data, timeout=20) as resp:
                     if resp.status == 200:
-                        print(f"✅ [BALE] پیام ارسال شد.")
+                        print(f"✅ {title} به بله ارسال شد.")
+                        return True
+                    else:
+                        print(f"❌ خطا در ارسال {title} به بله ({resp.status}) - تلاش مجدد...")
+        except Exception as e:
+            print(f"❌ خطای شبکه در ارسال {title} به بله ({e}) - تلاش مجدد...")
+        
+        await asyncio.sleep(5) # 5 ثانیه صبر و تلاش مجدد
+
+# ===== ارسال به تلگرام با تلاش نامحدود =====
+async def send_to_telegram(chat_id, text, photo_url=None, title=""):
+    if not TELEGRAM_TOKEN or not chat_id:
+        print("⚠️ [TELEGRAM] توکن یا Chat ID تنظیم نشده است.")
+        return False
+    
+    base_url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}"
+    
+    if photo_url:
+        url = f"{base_url}/sendPhoto"
+        data = {"chat_id": chat_id, "photo": photo_url, "caption": text, "parse_mode": "Markdown"}
+    else:
+        url = f"{base_url}/sendMessage"
+        data = {"chat_id": chat_id, "text": text, "parse_mode": "Markdown"}
+
+    while True: # تلاش نامحدود
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(url, json=data, timeout=20) as resp:
+                    if resp.status == 200:
+                        print(f"✅ {title} به تلگرام ارسال شد.")
                         return True
                     else:
                         err = await resp.text()
-                        print(f"⚠️ [BALE] خطای بله ({resp.status}): {err}")
+                        # اگر خطا مربوط به فرمت بندی بود، بدون فرمت بندی تلاش میکنیم
+                        if "can't parse entities" in err and "parse_mode" in data:
+                            del data["parse_mode"]
+                            print(f"⚠️ خطای فرمت بندی تلگرام. تلاش بدون فرمت...")
+                            continue
+                        print(f"❌ خطا در ارسال {title} به تلگرام ({resp.status}) - تلاش مجدد...")
         except Exception as e:
-            print(f"⚠️ [BALE] خطای شبکه ({e}) - تلاش {attempt+1}")
-        await asyncio.sleep(2)
-    return False
+            print(f"❌ خطای شبکه در ارسال {title} به تلگرام ({e}) - تلاش مجدد...")
+        
+        await asyncio.sleep(5) # 5 ثانیه صبر و تلاش مجدد
 
 # ===== قیمت طلا =====
 async def get_gold_price_text():
@@ -143,14 +169,13 @@ async def get_gold_price_text():
                         f"📅 تاریخ: {data.get('Date', '—')} - {data.get('Time', '—')}"
                     )
     except Exception as e:
-        print(f"❌ [PRICE] خطا در دریافت قیمت: {e}")
+        print(f"❌ خطا در دریافت قیمت طلا: {e}")
     return "❌ خطا در دریافت قیمت طلا."
 
 async def send_gold_price():
-    print("⏰ [JOB] زمان‌بند قیمت طلا...")
     text = await get_gold_price_text()
-    await send_to_bale(BALE_CHANNEL, text)
-    print("✅ [JOB] قیمت طلا به کانال ارسال شد.")
+    await send_to_bale(BALE_CHANNEL, text, title="قیمت طلا")
+    await send_to_telegram(TELEGRAM_CHAT_ID, text, title="قیمت طلا")
 
 # ===== محصولات =====
 async def fetch_products(params):
@@ -161,8 +186,8 @@ async def fetch_products(params):
         async with aiohttp.ClientSession() as session:
             async with session.get(url, params=final_params, headers=HEADERS, timeout=15) as resp:
                 if resp.status == 200: return await resp.json()
-    except Exception as e:
-        print(f"❌ [API] خطا: {e}")
+    except:
+        pass
     return []
 
 async def fetch_variations(product_id):
@@ -172,8 +197,8 @@ async def fetch_variations(product_id):
         async with aiohttp.ClientSession() as session:
             async with session.get(url, params=params, headers=HEADERS, timeout=15) as resp:
                 if resp.status == 200: return await resp.json()
-    except Exception as e:
-        print(f"❌ [API] خطا واریشن: {e}")
+    except:
+        pass
     return []
 
 async def format_and_send_product(p):
@@ -231,16 +256,14 @@ async def format_and_send_product(p):
     images = p.get("images", [])
     photo_url = images[0]["src"] if images else None
 
-    success = await send_to_bale(BALE_CHANNEL, text, photo_url=photo_url)
-    if success:
-        print(f"✅ [PRODUCT] محصول #{p['id']} ({name}) ارسال شد.")
-        return True
-    else:
-        print(f"❌ [PRODUCT] محصول #{p['id']} ({name}) ارسال نشد.")
-        return False
+    # ارسال به بله با نام محصول
+    title = f"محصول {name}"
+    await send_to_bale(BALE_CHANNEL, text, photo_url=photo_url, title=title)
+    await send_to_telegram(TELEGRAM_CHAT_ID, text, photo_url=photo_url, title=title)
+    
+    return True
 
 async def check_and_send_products():
-    print("\n🔍 [JOB] بررسی محصولات...")
     history = get_sent_history()
     out_of_stock = get_out_of_stock()
 
@@ -254,8 +277,6 @@ async def check_and_send_products():
         page += 1
         if page > 20:
             break
-
-    print(f"📦 [JOB] در کل {len(all_products)} محصول منتشرشده از سایت دریافت شد.")
 
     unsent = []
     for p in all_products:
@@ -271,23 +292,17 @@ async def check_and_send_products():
     save_out_of_stock(out_of_stock)
 
     if not unsent:
-        print("✅ [JOB] همه محصولات موجود قبلاً ارسال شده‌اند. هیچ محصول جدیدی نیست.")
         return
 
     selected_product = unsent[0]
-    print(f"🌟 [JOB] محصول انتخاب شد: #{selected_product['id']} - {selected_product.get('name')}")
     
     success = await format_and_send_product(selected_product)
     
     if success:
         history.add(selected_product["id"])
         save_sent_history(history)
-        print(f"✅ [JOB] محصول #{selected_product['id']} با موفقیت ارسال شد.")
-    else:
-        print("⚠️ [JOB] ارسال ناموفق بود. تلاش بعدی...")
 
 async def check_out_of_stock():
-    print("\n📦 [JOB] زمان‌بند هفتگی محصولات ناموجود...")
     out_of_stock = get_out_of_stock()
     history = get_sent_history()
     if not out_of_stock: return
@@ -297,7 +312,6 @@ async def check_out_of_stock():
         if not p_data: continue
         p = p_data[0]
         if p.get("stock_status") != "outofstock" and p["id"] not in history:
-            print(f"🎉 [JOB] محصول #{p['id']} موجود شد! ارسال...")
             success = await format_and_send_product(p)
             if success:
                 history.add(p["id"])
@@ -308,7 +322,6 @@ async def check_out_of_stock():
 
 # ===== ربات بله (Polling) =====
 async def bale_polling():
-    print("🤖 [POLLING] حلقه دریافت پیام‌ها شروع شد...")
     offset = 0
     base_url = f"https://tapi.bale.ai/bot{BALE_TOKEN}"
     while True:
@@ -325,47 +338,33 @@ async def bale_polling():
                                     chat_id = msg["chat"]["id"]
                                     if msg.get("text") == "/start":
                                         keyboard = {"inline_keyboard": [[{"text": "💰 قیمت لحظه‌ای طلا", "callback_data": "get_live_gold"}]]}
-                                        await send_to_bale(chat_id, "سلام! برای دریافت قیمت لحظه‌ای طلا روی دکمه زیر بزنید:", reply_markup=keyboard)
+                                        await send_to_bale(chat_id, "سلام! برای دریافت قیمت لحظه‌ای طلا روی دکمه زیر بزنید:", reply_markup=keyboard, title="پیام استارت")
                                 elif "callback_query" in upd:
                                     cb = upd["callback_query"]
                                     async with session.post(f"{base_url}/answerCallbackQuery", json={"callback_query_id": cb["id"]}) as ans: pass
                                     if cb["data"] == "get_live_gold":
                                         text = await get_gold_price_text()
                                         keyboard = {"inline_keyboard": [[{"text": "🔄 به‌روزرسانی قیمت", "callback_data": "get_live_gold"}]]}
-                                        await send_to_bale(cb["message"]["chat"]["id"], text, reply_markup=keyboard)
+                                        await send_to_bale(cb["message"]["chat"]["id"], text, reply_markup=keyboard, title="قیمت طلا (دکمه)")
         except asyncio.TimeoutError: pass
-        except Exception as e: print(f"❌ [POLLING] خطای شبکه: {e}")
+        except Exception as e: pass # خطاهای شبکه Polling رو نادیده می‌گیریم
         await asyncio.sleep(2)
 
 # ===== اجرا =====
 async def main():
-    print("🚀 [MAIN] شروع برنامه...")
-    if supabase:
-        print("✅ [MAIN] کلاینت Supabase ساخته شد.")
-    else:
-        print("❌ [MAIN] هشدار: کلاینت Supabase ساخته نشد!")
-
     if os.environ.get("PORT"):
         threading.Thread(target=run_web_server, daemon=True).start()
 
-    # تعریف منطقه زمانی تهران
     tehran_tz = pytz.timezone('Asia/Tehran')
-    
-    # ساختن زمان‌بند با منطقه زمانی تهران
     scheduler = AsyncIOScheduler(timezone=tehran_tz)
     
-    # قیمت طلا: فقط از ساعت 9 صبح تا 11 شب، هر 2 ساعت یکبار سر ساعت رند
-    scheduler.add_job(send_gold_price, 'cron', hour='9-23/2', minute=0)
+    zamanbandi = '9-23/3'
     
-    # محصولات: فقط از ساعت 9 صبح تا 11 شب، هر 2 ساعت یکبار سر ساعت رند
-    scheduler.add_job(check_and_send_products, 'cron', hour='9-23/1', minute=0)
-    
-    # بررسی هفتگی ناموجودها
+    scheduler.add_job(send_gold_price, 'cron', hour=zamanbandi, minute=0)
+    scheduler.add_job(check_and_send_products, 'cron', hour=zamanbandi, minute=0)
     scheduler.add_job(check_out_of_stock, 'interval', hours=168) 
     
     scheduler.start()
-    print("⏰ [MAIN] زمان‌بندها فعال شدند.")
-    print("ℹ️ [MAIN] ارسال‌ها فقط بین ساعت ۹ صبح تا ۱۱ شب (به وقت تهران) انجام می‌شوند.")
 
     asyncio.create_task(bale_polling())
 
@@ -376,5 +375,5 @@ if __name__ == "__main__":
     try:
         asyncio.run(main())
     except Exception as e:
-        print(f"❌ [MAIN] خطای اصلی: {e}")
+        print(f"❌ خطای اصلی: {e}")
         traceback.print_exc()
