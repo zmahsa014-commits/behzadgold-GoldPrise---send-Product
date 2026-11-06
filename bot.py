@@ -151,21 +151,21 @@ async def get_gold_price_text():
             async with session.get(PRICE_JSON_URL, headers=HEADERS, timeout=15) as resp:
                 if resp.status == 200:
                     data = await resp.json()
-                    # استفاده از \u00A0 (فاصله نشکن) به جای فاصله معمولی
+                    # استفاده از \u200D (Zero Width Joiner) برای اتصال کامل کلمات
                     return (
                         f"📊 **قیمت لحظه‌ای طلا و سکه**\n\n"
-                        f"🥇 هر گرم طلای ۱۸ عیار: **{data.get('Geram18', '—')}**\u00A0تومان\n"
-                        f"🔄 هر گرم طلای تعویضی: **{data.get('Taviz', '—')}**\u00A0تومان\n"
-                        f"💧 هر گرم طلای آب شده: **{data.get('ForushAbshode', '—')}**\u00A0تومان\n\n"
-                        f"🪙 سکه یک گرمی: **{data.get('YekGerami', '—')}**\u00A0تومان\n"
-                        f"🪙 سکه امامی جدید: **{data.get('Tamam', '—')}**\u00A0تومان\n"
-                        f"🪙 سکه تمام تاریخ پایین: **{data.get('SekeGhadim', '—')}**\u00A0تومان\n"
-                        f"🪙 سکه تمام طرح قدیم: **{data.get('SekeGhadim', '—')}**\u00A0تومان\n"
-                        f"🪙 سکه نیم تاریخ پایین: **{data.get('NimZir86', '—')}**\u00A0تومان\n"
-                        f"🪙 سکه نیم بهار آزادی: **{data.get('Nim', '—')}**\u00A0تومان\n"
-                        f"🪙 سکه ربع تاریخ پایین: **{data.get('RobZir86', '—')}**\u00A0تومان\n"
-                        f"🪙 سکه ربع بهار آزادی: **{data.get('Rob', '—')}**\u00A0تومان\n\n"
-                        f"🌍 اونس جهانی طلا: **{data.get('Ons', '—')}**\u00A0دلار\n\n"
+                        f"🔹 هر گرم طلای ۱۸ عیار: **{data.get('Geram18', '—')}**\u200D\u00A0تومان\n"
+                        #f"🔹 هر گرم طلای تعویضی: **{data.get('Taviz', '—')}**\u200D\u00A0تومان\n"
+                        f"🔹 هر گرم طلای آب شده: **{data.get('ForushAbshode', '—')}**\u200D\u00A0تومان\n\n"
+                        #f"🟠 سکه یک گرمی: **{data.get('YekGerami', '—')}**\u200D\u00A0تومان\n"
+                        f"🟠 سکه امامی جدید: **{data.get('Tamam', '—')}**\u200D\u00A0تومان\n"
+                        #f"🟠 سکه تمام تاریخ پایین: **{data.get('SekeGhadim', '—')}**\u200D\u00A0تومان\n"
+                        #f"🟠 سکه نیم تاریخ پایین: **{data.get('NimZir86', '—')}**\u200D\u00A0تومان\n"
+                        f"🟠 سکه نیم بهار آزادی: **{data.get('Nim', '—')}**\u200D\u00A0تومان\n"
+                        #f"🟠 سکه ربع تاریخ پایین: **{data.get('RobZir86', '—')}**\u200D\u00A0تومان\n"
+                        f"🟠 سکه ربع بهار آزادی: **{data.get('Rob', '—')}**\u200D\u00A0تومان\n"
+                        f"🟠 سکه تمام طرح قدیم: **{data.get('SekeGhadim', '—')}**\u200D\u00A0تومان\n\n"
+                        f"🌍 اونس جهانی طلا: **{data.get('Ons', '—')}**\u200D\u00A0دلار\n\n"
                         f"📅 تاریخ: {data.get('Date', '—')} - {data.get('Time', '—')}"
                     )
     except Exception as e:
@@ -246,15 +246,15 @@ async def format_and_send_product(p):
     text = f"✨ **{name}** ✨\n\n"
     if weight_str:
         text += f"{weight_str}\n\n"
-    text += "✅ عیار طلا: ۱۸ عیار است\n✅ فروش با فاکتور رسمی\n\n"
-    # استفاده از فاصله نشکن در اینجا هم برای قیمت محصول
-    text += f"💰 قیمت: {price}\u00A0تومان\n📈 (این قیمت با طلای {gold_price}\u00A0تومان محاسبه شده است)\n\n"
+    text += "✅ فروش با فاکتور رسمی\n✅ امکان خرید در 4 قسط با اسنپ‌پی\n✅ تخفیف 12 درصدی برای خرید نقدی\n\n"
+    # استفاده از \u200D و \u00A0 برای جلوگیری کامل از شکستن خط در قیمت محصول
+    text += f"💰 قیمت: {price}\u200D\u00A0تومان\n📈 (این قیمت با طلای {gold_price}\u200D\u00A0تومان محاسبه شده است)\n\n"
     if all_features:
         text += "📋 **مشخصات:**\n" + "\n".join(all_features) + "\n\n"
     text += (
         f"🏢 **آدرس فروشگاه:**\n"
         f"ساوه، خیابان سوم شعبان، پاساژ سامان، پلاک ۸\n"
-        f"☎️ 42226350 (086)\n\n"
+        f"☎️ تلفن : 42226350 (086)\n\n"
         f"🔗 [مشاهده محصول در سایت]({permalink})"
     )
 
@@ -405,18 +405,12 @@ async def main():
     tehran_tz = pytz.timezone('Asia/Tehran')
     scheduler = AsyncIOScheduler(timezone=tehran_tz)
     
-    # قیمت طلا: دقیقه 0 و 30 هر ساعت (از 9 صبح تا 11 شب + 00:00 بامداد)
     scheduler.add_job(send_gold_price, 'cron', hour='0,9-23', minute='0,30')
-    
-    # محصولات: هر 3 ساعت (از 9 صبح تا 11 شب + 00:00 بامداد)
     scheduler.add_job(check_and_send_products, 'cron', hour='0,9-23/1', minute=0)
-    
-    # بررسی هفتگی ناموجودها
     scheduler.add_job(check_out_of_stock, 'interval', hours=168) 
     
     scheduler.start()
 
-    # شروع حلقه‌های دریافت پیام
     asyncio.create_task(bale_polling())
     if TELEGRAM_TOKEN:
         asyncio.create_task(telegram_polling())
