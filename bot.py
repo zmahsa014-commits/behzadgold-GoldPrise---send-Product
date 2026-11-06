@@ -175,13 +175,13 @@ async def get_gold_price_text():
                     data = await resp.json()
                     return (
                         f"📊 *قیمت لحظه‌ای طلا و سکه*\n\n"
-                        f"🔹 هر گرم طلای ۱۸ عیار: **{data.get('Geram18', '—')}**\u200D\u00A0تومان\n"
-                        f"🔹 هر گرم طلای آب شده: **{data.get('ForushAbshode', '—')}**\u200D\u00A0تومان\n\n"
-                        f"🟠 سکه امامی جدید: **{data.get('Tamam', '—')}**\u200D\u00A0تومان\n"
-                        f"🟠 سکه نیم بهار آزادی: **{data.get('Nim', '—')}**\u200D\u00A0تومان\n"
-                        f"🟠 سکه ربع بهار آزادی: **{data.get('Rob', '—')}**\u200D\u00A0تومان\n"
-                        f"🟠 سکه تمام طرح قدیم: **{data.get('SekeGhadim', '—')}**\u200D\u00A0تومان\n\n"
-                        f"🌍 اونس جهانی طلا: **{data.get('Ons', '—')}**\u200D\u00A0دلار\n\n"
+                        f"🔹 هر گرم طلای ۱۸ عیار: *{data.get('Geram18', '—')}* تومان\n"
+                        f"🔹 هر گرم طلای آب شده: *{data.get('ForushAbshode', '—')}* تومان\n\n"
+                        f"🟠 سکه امامی جدید: *{data.get('Tamam', '—')}* تومان\n"
+                        f"🟠 سکه نیم بهار آزادی: *{data.get('Nim', '—')}* تومان\n"
+                        f"🟠 سکه ربع بهار آزادی: *{data.get('Rob', '—')}* تومان\n"
+                        f"🟠 سکه تمام طرح قدیم: *{data.get('SekeGhadim', '—')}* تومان\n\n"
+                        f"🌍 اونس جهانی طلا: *{data.get('Ons', '—')}* دلار\n\n"
                         f"📅 تاریخ: {data.get('Date', '—')} - {data.get('Time', '—')}"
                     )
     except Exception as e:
