@@ -154,18 +154,18 @@ async def get_gold_price_text():
                     # استفاده از \u200D (Zero Width Joiner) برای اتصال کامل کلمات
                     return (
                         f"📊 **قیمت لحظه‌ای طلا و سکه**\n\n"
-                        f"🔹 هر گرم طلای ۱۸ عیار:{data.get('Geram18', '—')}\u200D\u00A0تومان\n"
-                        #f"🔹 هر گرم طلای تعویضی: **{data.get('Taviz', '—')}**\u200D\u00A0تومان\n"
-                        f"🔹 هر گرم طلای آب شده:{data.get('ForushAbshode', '—')}\u200D\u00A0تومان\n\n"
-                        #f"🟠 سکه یک گرمی:{data.get('YekGerami', '—')}\u200D\u00A0تومان\n"
-                        f"🟠 سکه امامی جدید:{data.get('Tamam', '—')}\u200D\u00A0تومان\n"
-                        #f"🟠 سکه تمام تاریخ پایین:{data.get('SekeGhadim', '—')}\u200D\u00A0تومان\n"
-                        #f"🟠 سکه نیم تاریخ پایین:{data.get('NimZir86', '—')}\u200D\u00A0تومان\n"
-                        f"🟠 سکه نیم بهار آزادی:{data.get('Nim', '—')}\u200D\u00A0تومان\n"
-                        #f"🟠 سکه ربع تاریخ پایین:{data.get('RobZir86', '—')}\u200D\u00A0تومان\n"
-                        f"🟠 سکه ربع بهار آزادی:{data.get('Rob', '—')}\u200D\u00A0تومان\n"
-                        f"🟠 سکه تمام طرح قدیم:{data.get('SekeGhadim', '—')}\u200D\u00A0تومان\n\n"
-                        f"🌍 اونس جهانی طلا:{data.get('Ons', '—')}\u200D\u00A0دلار\n\n"
+                        f"🔹 هر گرم طلای ۱۸ عیار:{data.get('Geram18', '—')} تومان\n"
+                        #f"🔹 هر گرم طلای تعویضی: **{data.get('Taviz', '—')} تومان\n"
+                        f"🔹 هر گرم طلای آب شده:{data.get('ForushAbshode', '—')} تومان\n\n"
+                        #f"🟠 سکه یک گرمی:{data.get('YekGerami', '—')} تومان\n"
+                        f"🟠 سکه امامی جدید:{data.get('Tamam', '—')} تومان\n"
+                        #f"🟠 سکه تمام تاریخ پایین:{data.get('SekeGhadim', '—')} تومان\n"
+                        #f"🟠 سکه نیم تاریخ پایین:{data.get('NimZir86', '—')} تومان\n"
+                        f"🟠 سکه نیم بهار آزادی:{data.get('Nim', '—')} تومان\n"
+                        #f"🟠 سکه ربع تاریخ پایین:{data.get('RobZir86', '—')} تومان\n"
+                        f"🟠 سکه ربع بهار آزادی:{data.get('Rob', '—')} تومان\n"
+                        f"🟠 سکه تمام طرح قدیم:{data.get('SekeGhadim', '—')} تومان\n\n"
+                        f"🌍 اونس جهانی طلا:{data.get('Ons', '—')} دلار\n\n"
                         f"📅 تاریخ: {data.get('Date', '—')} - {data.get('Time', '—')}"
                     )
     except Exception as e:
@@ -247,10 +247,10 @@ async def format_and_send_product(p):
     if weight_str:
         text += f"{weight_str}\n\n"
     text += "✅ فروش با فاکتور رسمی\n✅ امکان خرید در 4 قسط با اسنپ‌پی\n✅ تخفیف 12 درصدی برای خرید نقدی\n\n"
-    # استفاده از \u200D و \u00A0 برای جلوگیری کامل از شکستن خط در قیمت محصول
-    text += f"💰 قیمت: {price}\u200D\u00A0تومان\n📈 (این قیمت با طلای {gold_price}\u200D\u00A0تومان محاسبه شده است)\n\n"
     if all_features:
         text += "📋 **مشخصات:**\n" + "\n".join(all_features) + "\n\n"
+        
+    text += f"💰 قیمت: {price} تومان\n📈 (این قیمت با طلای {gold_price} تومان محاسبه شده است)\n\n"
     text += (
         f"🏢 **آدرس فروشگاه:**\n"
         f"ساوه، خیابان سوم شعبان، پاساژ سامان، پلاک ۸\n"
