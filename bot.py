@@ -153,7 +153,7 @@ async def get_gold_price_text():
                     data = await resp.json()
                     # استفاده از \u200D (Zero Width Joiner) برای اتصال کامل کلمات
                     return (
-                        f"📊 **قیمت لحظه‌ای طلا و سکه**\n\n"
+                        f"📊 *قیمت لحظه‌ای طلا و سکه*\n\n"
                         f"🔹 هر گرم طلای ۱۸ عیار:{data.get('Geram18', '—')} تومان\n"
                         #f"🔹 هر گرم طلای تعویضی: **{data.get('Taviz', '—')} تومان\n"
                         f"🔹 هر گرم طلای آب شده:{data.get('ForushAbshode', '—')} تومان\n\n"
@@ -243,16 +243,16 @@ async def format_and_send_product(p):
     except:
         pass
 
-    text = f"✨ **{name}** ✨\n\n"
+    text = f"✨ *{name}* ✨\n\n"
     if weight_str:
         text += f"{weight_str}\n\n"
     text += "✅ فروش با فاکتور رسمی\n✅ امکان خرید در 4 قسط با اسنپ‌پی\n✅ تخفیف 12 درصدی برای خرید نقدی\n\n"
     if all_features:
-        text += "📋 **مشخصات:**\n" + "\n".join(all_features) + "\n\n"
+        text += "📋 *مشخصات:*\n" + "\n".join(all_features) + "\n\n"
         
     text += f"💰 قیمت: {price} تومان\n📈 (این قیمت با طلای {gold_price} تومان محاسبه شده است)\n\n"
     text += (
-        f"🏢 **آدرس فروشگاه:**\n"
+        f"🏢 *آدرس فروشگاه:*\n"
         f"ساوه، خیابان سوم شعبان، پاساژ سامان، پلاک ۸\n"
         f"☎️ تلفن : 42226350 (086)\n\n"
         f"🔗 [مشاهده محصول در سایت]({permalink})"
