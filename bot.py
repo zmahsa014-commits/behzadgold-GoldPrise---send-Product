@@ -24,6 +24,10 @@ PRICE_JSON_URL = os.environ.get("PRICE_JSON_URL")
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 
+# ===== نام کاربری ربات‌ها (برای دکمه‌های لینک) =====
+BALE_BOT_USERNAME = os.environ.get("BALE_BOT_USERNAME", "")
+TELEGRAM_BOT_USERNAME = os.environ.get("TELEGRAM_BOT_USERNAME", "")
+
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
 }
@@ -44,6 +48,19 @@ def home():
 def run_web_server():
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
+
+# ===== توابع ثبت آمار کاربران =====
+def log_user_stats(user_id, username, first_name):
+    if not supabase: return
+    try:
+        res = supabase.table("bot_users").select("user_id, request_count").eq("user_id", user_id).execute()
+        if res.data:
+            current_count = res.data[0]["request_count"]
+            supabase.table("bot_users").update({"request_count": current_count + 1, "last_request": "now()"}).eq("user_id", user_id).execute()
+        else:
+            supabase.table("bot_users").insert({"user_id": user_id, "username": username, "first_name": first_name, "request_count": 1}).execute()
+    except Exception as e:
+        print(f"❌ خطا در ثبت آمار: {e}")
 
 # ===== توابع کمکی ذخیره‌سازی (Supabase) =====
 def get_sent_history():
@@ -111,7 +128,7 @@ async def send_to_bale(chat_id, text, photo_url=None, reply_markup=None, title="
         await asyncio.sleep(5)
 
 # ===== ارسال به تلگرام با تلاش نامحدود =====
-async def send_to_telegram(chat_id, text, photo_url=None, title=""):
+async def send_to_telegram(chat_id, text, photo_url=None, reply_markup=None, title=""):
     if not TELEGRAM_TOKEN or not chat_id:
         print("⚠️ [TELEGRAM] توکن یا Chat ID تنظیم نشده است.")
         return False
@@ -124,6 +141,9 @@ async def send_to_telegram(chat_id, text, photo_url=None, title=""):
     else:
         url = f"{base_url}/sendMessage"
         data = {"chat_id": chat_id, "text": text, "parse_mode": "Markdown"}
+    
+    if reply_markup:
+        data["reply_markup"] = reply_markup
 
     while True:
         try:
@@ -145,37 +165,49 @@ async def send_to_telegram(chat_id, text, photo_url=None, title=""):
         await asyncio.sleep(5)
 
 # ===== قیمت طلا =====
-async def get_gold_price_text():
+async def get_gold_price_text_and_buttons():
+    text = ""
+    bale_buttons = []
+    tg_buttons = []
+    
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(PRICE_JSON_URL, headers=HEADERS, timeout=15) as resp:
                 if resp.status == 200:
                     data = await resp.json()
-                    # استفاده از \u200D (Zero Width Joiner) برای اتصال کامل کلمات
-                    return (
+                    text = (
                         f"📊 *قیمت لحظه‌ای طلا و سکه*\n\n"
-                        f"🔹 هر گرم طلای ۱۸ عیار:{data.get('Geram18', '—')} تومان\n"
-                        #f"🔹 هر گرم طلای تعویضی: **{data.get('Taviz', '—')} تومان\n"
-                        f"🔹 هر گرم طلای آب شده:{data.get('ForushAbshode', '—')} تومان\n\n"
-                        #f"🟠 سکه یک گرمی:{data.get('YekGerami', '—')} تومان\n"
-                        f"🟠 سکه امامی جدید:{data.get('Tamam', '—')} تومان\n"
-                        #f"🟠 سکه تمام تاریخ پایین:{data.get('SekeGhadim', '—')} تومان\n"
-                        #f"🟠 سکه نیم تاریخ پایین:{data.get('NimZir86', '—')} تومان\n"
-                        f"🟠 سکه نیم بهار آزادی:{data.get('Nim', '—')} تومان\n"
-                        #f"🟠 سکه ربع تاریخ پایین:{data.get('RobZir86', '—')} تومان\n"
-                        f"🟠 سکه ربع بهار آزادی:{data.get('Rob', '—')} تومان\n"
-                        f"🟠 سکه تمام طرح قدیم:{data.get('SekeGhadim', '—')} تومان\n\n"
-                        f"🌍 اونس جهانی طلا:{data.get('Ons', '—')} دلار\n\n"
+                        f"🔹 هر گرم طلای ۱۸ عیار: *{data.get('Geram18', '—')}* تومان\n"
+                        f"🔹 هر گرم طلای آب شده: *{data.get('ForushAbshode', '—')}* تومان\n\n"
+                        f"🟠 سکه امامی جدید: *{data.get('Tamam', '—')}* تومان\n"
+                        f"🟠 سکه نیم بهار آزادی: *{data.get('Nim', '—')}* تومان\n"
+                        f"🟠 سکه ربع بهار آزادی: *{data.get('Rob', '—')}* تومان\n"
+                        f"🟠 سکه تمام طرح قدیم: *{data.get('SekeGhadim', '—')}* تومان\n\n"
+                        f"🌍 اونس جهانی طلا: *{data.get('Ons', '—')}* دلار\n\n"
                         f"📅 تاریخ: {data.get('Date', '—')} - {data.get('Time', '—')}"
                     )
     except Exception as e:
-        print(f"❌ خطا در دریافت قیمت طلا: {e}")
-    return "❌ خطا در دریافت قیمت طلا."
+        print(f"❌ خطا در دریافت قیمت: {e}")
+        text = "❌ خطا در دریافت قیمت طلا."
+
+    # ساخت دکمه‌های بله
+    if BALE_BOT_USERNAME:
+        bale_buttons = [[{"text": "🤖 دریافت قیمت لحظه‌ای از ربات بله", "url": f"https://ble.ir/{BALE_BOT_USERNAME}"}]]
+    
+    # ساخت دکمه‌های تلگرام
+    if TELEGRAM_BOT_USERNAME:
+        tg_buttons = [[{"text": "🤖 دریافت قیمت لحظه‌ای از ربات تلگرام", "url": f"https://t.me/{TELEGRAM_BOT_USERNAME}"}]]
+        
+    return text, bale_buttons, tg_buttons
 
 async def send_gold_price():
-    text = await get_gold_price_text()
-    await send_to_bale(BALE_CHANNEL, text, title="قیمت طلا")
-    await send_to_telegram(TELEGRAM_CHAT_ID, text, title="قیمت طلا")
+    text, bale_btns, tg_btns = await get_gold_price_text_and_buttons()
+    
+    bale_markup = {"inline_keyboard": bale_btns} if bale_btns else None
+    await send_to_bale(BALE_CHANNEL, text, reply_markup=bale_markup, title="قیمت طلا")
+    
+    tg_markup = {"inline_keyboard": tg_btns} if tg_btns else None
+    await send_to_telegram(TELEGRAM_CHAT_ID, text, reply_markup=tg_markup, title="قیمت طلا")
 
 # ===== محصولات =====
 async def fetch_products(params):
@@ -340,16 +372,27 @@ async def bale_polling():
                                 if "message" in upd:
                                     msg = upd["message"]
                                     chat_id = msg["chat"]["id"]
+                                    user = msg.get("from", {})
+                                    
+                                    # ثبت آمار کاربر در بله
+                                    log_user_stats(chat_id, user.get("username"), user.get("first_name"))
+                                    
                                     if msg.get("text") == "/start":
                                         keyboard = {"inline_keyboard": [[{"text": "💰 قیمت لحظه‌ای طلا", "callback_data": "get_live_gold"}]]}
                                         await send_to_bale(chat_id, "سلام! برای دریافت قیمت لحظه‌ای طلا روی دکمه زیر بزنید:", reply_markup=keyboard, title="پیام استارت")
                                 elif "callback_query" in upd:
                                     cb = upd["callback_query"]
+                                    chat_id = cb["message"]["chat"]["id"]
+                                    user = cb.get("from", {})
+                                    
+                                    # ثبت آمار کاربر در بله (کلیک دکمه)
+                                    log_user_stats(chat_id, user.get("username"), user.get("first_name"))
+                                    
                                     async with session.post(f"{base_url}/answerCallbackQuery", json={"callback_query_id": cb["id"]}) as ans: pass
                                     if cb["data"] == "get_live_gold":
-                                        text = await get_gold_price_text()
-                                        keyboard = {"inline_keyboard": [[{"text": "🔄 به‌روزرسانی قیمت", "callback_data": "get_live_gold"}]]}
-                                        await send_to_bale(cb["message"]["chat"]["id"], text, reply_markup=keyboard, title="قیمت طلا (دکمه)")
+                                        text, bale_btns, _ = await get_gold_price_text_and_buttons()
+                                        bale_markup = {"inline_keyboard": bale_btns} if bale_btns else None
+                                        await send_to_bale(chat_id, text, reply_markup=bale_markup, title="قیمت طلا (دکمه)")
         except asyncio.TimeoutError: pass
         except Exception as e: pass
         await asyncio.sleep(2)
@@ -371,9 +414,12 @@ async def telegram_polling():
                                 if "message" in upd:
                                     msg = upd["message"]
                                     chat_id = msg["chat"]["id"]
-                                    text_msg = msg.get("text", "")
+                                    user = msg.get("from", {})
                                     
-                                    if text_msg.startswith("/start"):
+                                    # ثبت آمار کاربر در تلگرام
+                                    log_user_stats(chat_id, user.get("username"), user.get("first_name"))
+                                    
+                                    if msg.get("text", "").startswith("/start"):
                                         keyboard = {"inline_keyboard": [[{"text": "💰 قیمت لحظه‌ای طلا", "callback_data": "get_live_gold_telegram"}]]}
                                         await send_to_telegram(chat_id, "سلام! برای دریافت قیمت لحظه‌ای طلا روی دکمه زیر بزنید:", title="پیام استارت")
                                         data_msg = {"chat_id": chat_id, "text": "لطفا یکی از گزینه‌های زیر را انتخاب کنید:", "reply_markup": keyboard}
@@ -381,16 +427,18 @@ async def telegram_polling():
                                         
                                 elif "callback_query" in upd:
                                     cb = upd["callback_query"]
-                                    cb_id = cb["id"]
                                     chat_id = cb["message"]["chat"]["id"]
-                                    cb_data = cb["data"]
+                                    user = cb.get("from", {})
                                     
-                                    async with session.post(f"{base_url}/answerCallbackQuery", json={"callback_query_id": cb_id}) as ans: pass
+                                    # ثبت آمار کاربر در تلگرام (کلیک دکمه)
+                                    log_user_stats(chat_id, user.get("username"), user.get("first_name"))
                                     
-                                    if cb_data == "get_live_gold_telegram":
-                                        text = await get_gold_price_text()
-                                        keyboard = {"inline_keyboard": [[{"text": "🔄 به‌روزرسانی قیمت", "callback_data": "get_live_gold_telegram"}]]}
-                                        data_msg = {"chat_id": chat_id, "text": text, "reply_markup": keyboard, "parse_mode": "Markdown"}
+                                    async with session.post(f"{base_url}/answerCallbackQuery", json={"callback_query_id": cb["id"]}) as ans: pass
+                                    
+                                    if cb["data"] == "get_live_gold_telegram":
+                                        text, _, tg_btns = await get_gold_price_text_and_buttons()
+                                        tg_markup = {"inline_keyboard": tg_btns} if tg_btns else None
+                                        data_msg = {"chat_id": chat_id, "text": text, "reply_markup": tg_markup, "parse_mode": "Markdown"}
                                         async with session.post(f"{base_url}/sendMessage", json=data_msg) as r: pass
                                         print("✅ قیمت طلا (دکمه) به تلگرام ارسال شد.")
         except asyncio.TimeoutError: pass
