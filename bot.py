@@ -444,11 +444,11 @@ async def main():
     tehran_tz = pytz.timezone('Asia/Tehran')
     scheduler = AsyncIOScheduler(timezone=tehran_tz)
     
-    # قیمت طلا: دقیقه 0 و 30 (از 9 صبح تا 11 شب + دقیقاً 00:00 بامداد)
-    scheduler.add_job(send_gold_price, 'cron', hour='0,9-23', minute='0,30')
+    # قیمت طلا: هر 1 ساعت دقیقه 0 (از 9 صبح تا 11 شب + دقیقاً 00:00 بامداد)
+    scheduler.add_job(send_gold_price, 'cron', hour='0,9-23/1', minute=0)
     
-    # محصولات: هر 1 ساعت، دقیقه 0 (از 9 صبح تا 11 شب + دقیقاً 00:00 بامداد)
-    scheduler.add_job(check_and_send_products, 'cron', hour='0,9-23/1', minute=0)
+    # محصولات: دقیقه 0 و 30 (از 9 صبح تا 11 شب + دقیقاً 00:00 بامداد)
+    scheduler.add_job(check_and_send_products, 'cron', hour='0,9-23', minute='0,30')
     
     # بررسی هفتگی ناموجودها
     scheduler.add_job(check_out_of_stock, 'interval', hours=168) 
