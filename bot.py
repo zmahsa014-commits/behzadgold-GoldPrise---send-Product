@@ -94,3 +94,35 @@ def get_sent_history():
 
 
 def save_sent_history(history_set):
+
+    if not supabase:
+        return
+
+    try:
+        history_str = json.dumps(list(history_set))
+
+        supabase.table("last_orders").update({
+            "sent_history": history_str
+        }).eq(
+            "site_name", "behzadgold_bot_sent_history"
+        ).execute()
+
+    except Exception as e:
+        print(f"خطا در ذخیره تاریخچه: {e}")
+
+
+def get_out_of_stock():
+
+    if not supabase:
+        return set()
+
+    try:
+        response = (
+            supabase.table("last_orders")
+            .select("sent_history")
+            .eq("site_name", "behzadgold_bot_out_of_stock")
+            .execute()
+        )
+
+        if response.data and response.data[0].get("sent_history"):
+            return set(
