@@ -7,6 +7,7 @@ import json
 import threading
 import traceback
 import pytz
+from datetime import datetime
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from flask import Flask
 from supabase import create_client, Client
@@ -24,7 +25,7 @@ PRICE_JSON_URL = os.environ.get("PRICE_JSON_URL")
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 
-# ===== نام کاربری ربات‌ها (برای دکمه‌های لینک) =====
+# ===== نام کاربری ربات‌ها =====
 BALE_BOT_USERNAME = os.environ.get("BALE_BOT_USERNAME", "")
 TELEGRAM_BOT_USERNAME = os.environ.get("TELEGRAM_BOT_USERNAME", "")
 
@@ -49,11 +50,9 @@ def run_web_server():
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
 
-# ===== توابع ثبت آمار کاربران =====
+# ===== توابع ثبت آمار =====
 def log_user_stats(user_id, username, first_name):
-    if not supabase: 
-        print("⚠️ [DB] کلاینت Supabase وجود ندارد.")
-        return
+    if not supabase: return
     try:
         res = supabase.table("bot_users").select("user_id, request_count").eq("user_id", user_id).execute()
         if res.data:
@@ -64,7 +63,6 @@ def log_user_stats(user_id, username, first_name):
     except Exception as e:
         print(f"❌ [DB] خطا در ثبت آمار: {e}")
 
-# ===== توابع کمکی ذخیره‌سازی (Supabase) =====
 def get_sent_history():
     if not supabase: return set()
     try:
@@ -101,7 +99,7 @@ def save_out_of_stock(out_set):
     except:
         pass
 
-# ===== ارسال به بله با تلاش نامحدود =====
+# ===== ارسال به بله =====
 async def send_to_bale(chat_id, text, photo_url=None, reply_markup=None, title=""):
     base_url = f"https://tapi.bale.ai/bot{BALE_TOKEN}"
     data = {"chat_id": chat_id}
@@ -129,7 +127,7 @@ async def send_to_bale(chat_id, text, photo_url=None, reply_markup=None, title="
         
         await asyncio.sleep(5)
 
-# ===== ارسال به تلگرام با تلاش نامحدود =====
+# ===== ارسال به تلگرام =====
 async def send_to_telegram(chat_id, text, photo_url=None, reply_markup=None, title=""):
     if not TELEGRAM_TOKEN or not chat_id:
         print("⚠️ [TELEGRAM] توکن یا Chat ID تنظیم نشده است.")
@@ -175,13 +173,13 @@ async def get_gold_price_text():
                     data = await resp.json()
                     return (
                         f"📊 *قیمت لحظه‌ای طلا و سکه*\n\n"
-                        f"🔹 هر گرم طلای ۱۸ عیار: *{data.get('Geram18', '—')}* تومان\n"
-                        f"🔹 هر گرم طلای آب شده: *{data.get('ForushAbshode', '—')}* تومان\n\n"
-                        f"🟠 سکه امامی جدید: *{data.get('Tamam', '—')}* تومان\n"
-                        f"🟠 سکه نیم بهار آزادی: *{data.get('Nim', '—')}* تومان\n"
-                        f"🟠 سکه ربع بهار آزادی: *{data.get('Rob', '—')}* تومان\n"
-                        f"🟠 سکه تمام طرح قدیم: *{data.get('SekeGhadim', '—')}* تومان\n\n"
-                        f"🌍 اونس جهانی طلا: *{data.get('Ons', '—')}* دلار\n\n"
+                        f"🔹 هر گرم طلای ۱۸ عیار: **{data.get('Geram18', '—')}**\u200D\u00A0تومان\n"
+                        f"🔹 هر گرم طلای آب شده: **{data.get('ForushAbshode', '—')}**\u200D\u00A0تومان\n\n"
+                        f"🟠 سکه امامی جدید: **{data.get('Tamam', '—')}**\u200D\u00A0تومان\n"
+                        f"🟠 سکه نیم بهار آزادی: **{data.get('Nim', '—')}**\u200D\u00A0تومان\n"
+                        f"🟠 سکه ربع بهار آزادی: **{data.get('Rob', '—')}**\u200D\u00A0تومان\n"
+                        f"🟠 سکه تمام طرح قدیم: **{data.get('SekeGhadim', '—')}**\u200D\u00A0تومان\n\n"
+                        f"🌍 اونس جهانی طلا: **{data.get('Ons', '—')}**\u200D\u00A0دلار\n\n"
                         f"📅 تاریخ: {data.get('Date', '—')} - {data.get('Time', '—')}"
                     )
     except Exception as e:
@@ -189,6 +187,12 @@ async def get_gold_price_text():
     return "❌ خطا در دریافت قیمت طلا."
 
 async def send_gold_price():
+    # جلوگیری از ارسال در ساعت 00:30
+    now = datetime.now(pytz.timezone('Asia/Tehran'))
+    if now.hour == 0 and now.minute == 30:
+        print("⏳ [JOB] ساعت ۰۰:۳۰ بامداد است. از ارسال قیمت صرف‌نظر شد.")
+        return
+
     text = await get_gold_price_text()
     
     bale_btns = [[{"text": "🤖 دریافت قیمت لحظه‌ای از ربات", "url": f"https://ble.ir/{BALE_BOT_USERNAME}"}]] if BALE_BOT_USERNAME else None
@@ -291,8 +295,14 @@ async def format_and_send_product(p):
     return True
 
 async def check_and_send_products():
-    # ===== مکث ۳۰ ثانیه‌ای برای جلوگیری از تداخل =====
-    print("⏳ [JOB] مکث ۳۰ ثانیه‌ای برای جلوگیری از تداخل با ارسال قیمت طلا...")
+    # جلوگیری از ارسال در ساعت 00:30
+    now = datetime.now(pytz.timezone('Asia/Tehran'))
+    if now.hour == 0 and now.minute == 30:
+        print("⏳ [JOB] ساعت ۰۰:۳۰ بامداد است. از ارسال محصولات صرف‌نظر شد.")
+        return
+
+    # مکث ۳۰ ثانیه‌ای برای جلوگیری از تداخل با قیمت
+    print("⏳ [JOB] مکث ۳۰ ثانیه‌ای برای جلوگیری از تداخل...")
     await asyncio.sleep(30)
     
     history = get_sent_history()
@@ -326,7 +336,6 @@ async def check_and_send_products():
         return
 
     selected_product = unsent[0]
-    
     success = await format_and_send_product(selected_product)
     
     if success:
@@ -447,7 +456,7 @@ async def main():
     # قیمت طلا: هر 1 ساعت دقیقه 0 (از 9 صبح تا 11 شب + دقیقاً 00:00 بامداد)
     scheduler.add_job(send_gold_price, 'cron', hour='0,9-23/1', minute=0)
     
-    # محصولات: دقیقه 0 و 30 (از 9 صبح تا 11 شب + دقیقاً 00:00 بامداد)
+    # محصولات: دقیقه 0 و 30 (از 9 صبح تا 11:30 شب + دقیقاً 00:00 بامداد)
     scheduler.add_job(check_and_send_products, 'cron', hour='0,9-23', minute='0,30')
     
     # بررسی هفتگی ناموجودها
