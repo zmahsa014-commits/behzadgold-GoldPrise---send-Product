@@ -173,13 +173,13 @@ async def get_gold_price_text():
                     data = await resp.json()
                     return (
                         f"📊 *قیمت لحظه‌ای طلا و سکه*\n\n"
-                        f"🔹 هر گرم طلای ۱۸ عیار: **{data.get('Geram18', '—')}**\u200D\u00A0تومان\n"
-                        f"🔹 هر گرم طلای آب شده: **{data.get('ForushAbshode', '—')}**\u200D\u00A0تومان\n\n"
-                        f"🟠 سکه امامی جدید: **{data.get('Tamam', '—')}**\u200D\u00A0تومان\n"
-                        f"🟠 سکه نیم بهار آزادی: **{data.get('Nim', '—')}**\u200D\u00A0تومان\n"
-                        f"🟠 سکه ربع بهار آزادی: **{data.get('Rob', '—')}**\u200D\u00A0تومان\n"
-                        f"🟠 سکه تمام طرح قدیم: **{data.get('SekeGhadim', '—')}**\u200D\u00A0تومان\n\n"
-                        f"🌍 اونس جهانی طلا: **{data.get('Ons', '—')}**\u200D\u00A0دلار\n\n"
+                        f"🔹 هر گرم طلای ۱۸ عیار: *{data.get('Geram18', '—')}* تومان\n"
+                        f"🔹 هر گرم طلای آب شده: *{data.get('ForushAbshode', '—')}* تومان\n\n"
+                        f"🟠 سکه امامی جدید: *{data.get('Tamam', '—')}* تومان\n"
+                        f"🟠 سکه نیم بهار آزادی: *{data.get('Nim', '—')}* تومان\n"
+                        f"🟠 سکه ربع بهار آزادی: *{data.get('Rob', '—')}* تومان\n"
+                        f"🟠 سکه تمام طرح قدیم: *{data.get('SekeGhadim', '—')}* تومان\n\n"
+                        f"🌍 اونس جهانی طلا: *{data.get('Ons', '—')}* دلار\n\n"
                         f"📅 تاریخ: {data.get('Date', '—')} - {data.get('Time', '—')}"
                     )
     except Exception as e:
@@ -277,7 +277,7 @@ async def format_and_send_product(p):
     if all_features:
         text += "📋 *مشخصات:*\n" + "\n".join(all_features) + "\n\n"
         
-    text += f"💰 قیمت: {price}\u200D\u00A0تومان\n📈 (این قیمت با طلای {gold_price}\u200D\u00A0تومان محاسبه شده است)\n\n"
+    text += f"💰 قیمت: {price} تومان\n📈 (این قیمت با طلای {gold_price} تومان محاسبه شده است)\n\n"
     text += (
         f"🏢 *آدرس فروشگاه:*\n"
         f"ساوه، خیابان سوم شعبان، پاساژ سامان، پلاک ۸\n"
