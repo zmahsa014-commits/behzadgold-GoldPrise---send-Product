@@ -7,6 +7,7 @@ import json
 import threading
 import traceback
 import pytz
+import re
 from datetime import datetime
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from flask import Flask
@@ -187,7 +188,6 @@ async def get_gold_price_text():
     return "❌ خطا در دریافت قیمت طلا."
 
 async def send_gold_price():
-    # جلوگیری از ارسال در ساعت 00:30
     now = datetime.now(pytz.timezone('Asia/Tehran'))
     if now.hour == 0 and now.minute == 30:
         print("⏳ [JOB] ساعت ۰۰:۳۰ بامداد است. از ارسال قیمت صرف‌نظر شد.")
@@ -260,6 +260,11 @@ async def format_and_send_product(p):
             elif options and attr_name == "وزن":
                 weight_str = f"⚖️ وزن: {options[0]}"
 
+    # ===== استخراج و پاکسازی توضیحات کوتاه =====
+    short_desc_raw = p.get("short_description", "")
+    # حذف تگ‌های HTML و فاصله‌های اضافی
+    short_desc_clean = re.sub('<[^<]+?>', '', short_desc_raw).strip()
+
     gold_price = "—"
     try:
         async with aiohttp.ClientSession() as session:
@@ -271,6 +276,11 @@ async def format_and_send_product(p):
         pass
 
     text = f"✨ *{name}* ✨\n\n"
+    
+    # اضافه کردن توضیحات کوتاه در صورت وجود
+    if short_desc_clean:
+        text += f"📝 {short_desc_clean}\n\n"
+        
     if weight_str:
         text += f"*{weight_str}*\n\n"
     text += "✅ فروش با فاکتور رسمی\n✅ امکان خرید در 4 قسط با اسنپ‌پی\n✅ تخفیف 12 درصدی برای خرید نقدی\n\n"
@@ -295,13 +305,11 @@ async def format_and_send_product(p):
     return True
 
 async def check_and_send_products():
-    # جلوگیری از ارسال در ساعت 00:30
     now = datetime.now(pytz.timezone('Asia/Tehran'))
     if now.hour == 0 and now.minute == 30:
         print("⏳ [JOB] ساعت ۰۰:۳۰ بامداد است. از ارسال محصولات صرف‌نظر شد.")
         return
 
-    # مکث ۳۰ ثانیه‌ای برای جلوگیری از تداخل با قیمت
     print("⏳ [JOB] مکث ۳۰ ثانیه‌ای برای جلوگیری از تداخل...")
     await asyncio.sleep(30)
     
@@ -453,13 +461,8 @@ async def main():
     tehran_tz = pytz.timezone('Asia/Tehran')
     scheduler = AsyncIOScheduler(timezone=tehran_tz)
     
-    # قیمت طلا: هر 1 ساعت دقیقه 0 (از 9 صبح تا 11 شب + دقیقاً 00:00 بامداد)
-    scheduler.add_job(send_gold_price, 'cron', hour='0,9-23/1', minute=0)
-    
-    # محصولات: دقیقه 0 و 30 (از 9 صبح تا 11:30 شب + دقیقاً 00:00 بامداد)
+    scheduler.add_job(send_gold_price, 'cron', hour='0,9-23', minute='0,30')
     scheduler.add_job(check_and_send_products, 'cron', hour='0,9-23', minute='0,30')
-    
-    # بررسی هفتگی ناموجودها
     scheduler.add_job(check_out_of_stock, 'interval', hours=168) 
     
     scheduler.start()
