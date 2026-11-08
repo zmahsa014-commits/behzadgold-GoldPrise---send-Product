@@ -189,8 +189,9 @@ async def get_gold_price_text():
 
 async def send_gold_price():
     now = datetime.now(pytz.timezone('Asia/Tehran'))
-    if now.hour == 0 and now.minute == 30:
-        print("⏳ [JOB] ساعت ۰۰:۳۰ بامداد است. از ارسال قیمت صرف‌نظر شد.")
+    # جلوگیری از ارسال بین 00:29 تا 00:31
+    if now.hour == 0 and now.minute in [29, 30, 31]:
+        print("⏳ [JOB] در بازه ممنوعه بامداد (00:30) هستیم. از ارسال قیمت صرف‌نظر شد.")
         return
 
     text = await get_gold_price_text()
@@ -262,7 +263,6 @@ async def format_and_send_product(p):
 
     # ===== استخراج و پاکسازی توضیحات کوتاه =====
     short_desc_raw = p.get("short_description", "")
-    # حذف تگ‌های HTML و فاصله‌های اضافی
     short_desc_clean = re.sub('<[^<]+?>', '', short_desc_raw).strip()
 
     gold_price = "—"
@@ -282,9 +282,8 @@ async def format_and_send_product(p):
     text += "✅ فروش با فاکتور رسمی\n✅ امکان خرید در 4 قسط با اسنپ‌پی\n✅ تخفیف 12 درصدی برای خرید نقدی\n\n"
     if all_features:
         text += "📋 *مشخصات:*\n" + "\n".join(all_features) + "\n\n"
-        # اضافه کردن توضیحات کوتاه در صورت وجود
     if short_desc_clean:
-        text += f"*{short_desc_clean}*\n\n"
+    text += f"*{short_desc_clean}*\n\n"
         
     text += f"💰 قیمت: {price} تومان\n📈 (این قیمت با طلای {gold_price} تومان محاسبه شده است)\n\n"
     text += (
@@ -305,13 +304,20 @@ async def format_and_send_product(p):
 
 async def check_and_send_products():
     now = datetime.now(pytz.timezone('Asia/Tehran'))
-    if now.hour == 0 and now.minute == 30:
-        print("⏳ [JOB] ساعت ۰۰:۳۰ بامداد است. از ارسال محصولات صرف‌نظر شد.")
+    # جلوگیری از ارسال بین 00:29 تا 00:31
+    if now.hour == 0 and now.minute in [29, 30, 31]:
+        print("⏳ [JOB] در بازه ممنوعه بامداد (00:30) هستیم. از ارسال محصولات صرف‌نظر شد.")
         return
 
     print("⏳ [JOB] مکث ۳۰ ثانیه‌ای برای جلوگیری از تداخل...")
     await asyncio.sleep(30)
     
+    # چک مجدد زمان بعد از مکث (برای اطمینان از اینکه وارد بازه 00:30 نشدیم)
+    now_after = datetime.now(pytz.timezone('Asia/Tehran'))
+    if now_after.hour == 0 and now_after.minute in [29, 30, 31]:
+        print("⏳ [JOB] بعد از مکث، وارد بازه ممنوعه شدیم. از ارسال صرف‌نظر شد.")
+        return
+
     history = get_sent_history()
     out_of_stock = get_out_of_stock()
 
