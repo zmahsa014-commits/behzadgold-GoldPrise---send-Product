@@ -189,7 +189,6 @@ async def get_gold_price_text():
 
 async def send_gold_price():
     now = datetime.now(pytz.timezone('Asia/Tehran'))
-    # جلوگیری از ارسال بین 00:29 تا 00:31
     if now.hour == 0 and now.minute in [29, 30, 31]:
         print("⏳ [JOB] در بازه ممنوعه بامداد (00:30) هستیم. از ارسال قیمت صرف‌نظر شد.")
         return
@@ -261,7 +260,6 @@ async def format_and_send_product(p):
             elif options and attr_name == "وزن":
                 weight_str = f"⚖️ وزن: {options[0]}"
 
-    # ===== استخراج و پاکسازی توضیحات کوتاه =====
     short_desc_raw = p.get("short_description", "")
     short_desc_clean = re.sub('<[^<]+?>', '', short_desc_raw).strip()
 
@@ -276,7 +274,7 @@ async def format_and_send_product(p):
         pass
 
     text = f"✨ *{name}* ✨\n\n"
-        
+      
     if weight_str:
         text += f"*{weight_str}*\n\n"
     text += "✅ فروش با فاکتور رسمی\n✅ امکان خرید در 4 قسط با اسنپ‌پی\n✅ تخفیف 12 درصدی برای خرید نقدی\n\n"
@@ -304,7 +302,6 @@ async def format_and_send_product(p):
 
 async def check_and_send_products():
     now = datetime.now(pytz.timezone('Asia/Tehran'))
-    # جلوگیری از ارسال بین 00:29 تا 00:31
     if now.hour == 0 and now.minute in [29, 30, 31]:
         print("⏳ [JOB] در بازه ممنوعه بامداد (00:30) هستیم. از ارسال محصولات صرف‌نظر شد.")
         return
@@ -312,7 +309,6 @@ async def check_and_send_products():
     print("⏳ [JOB] مکث ۳۰ ثانیه‌ای برای جلوگیری از تداخل...")
     await asyncio.sleep(30)
     
-    # چک مجدد زمان بعد از مکث (برای اطمینان از اینکه وارد بازه 00:30 نشدیم)
     now_after = datetime.now(pytz.timezone('Asia/Tehran'))
     if now_after.hour == 0 and now_after.minute in [29, 30, 31]:
         print("⏳ [JOB] بعد از مکث، وارد بازه ممنوعه شدیم. از ارسال صرف‌نظر شد.")
