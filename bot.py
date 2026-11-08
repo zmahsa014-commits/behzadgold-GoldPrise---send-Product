@@ -276,16 +276,15 @@ async def format_and_send_product(p):
         pass
 
     text = f"✨ *{name}* ✨\n\n"
-    
-    # اضافه کردن توضیحات کوتاه در صورت وجود
-    if short_desc_clean:
-        text += f"📝 {short_desc_clean}\n\n"
         
     if weight_str:
         text += f"*{weight_str}*\n\n"
     text += "✅ فروش با فاکتور رسمی\n✅ امکان خرید در 4 قسط با اسنپ‌پی\n✅ تخفیف 12 درصدی برای خرید نقدی\n\n"
     if all_features:
         text += "📋 *مشخصات:*\n" + "\n".join(all_features) + "\n\n"
+        # اضافه کردن توضیحات کوتاه در صورت وجود
+    if short_desc_clean:
+        text += f"*{short_desc_clean}*\n\n"
         
     text += f"💰 قیمت: {price} تومان\n📈 (این قیمت با طلای {gold_price} تومان محاسبه شده است)\n\n"
     text += (
