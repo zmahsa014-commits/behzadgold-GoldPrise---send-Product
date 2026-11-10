@@ -262,7 +262,6 @@ async def format_and_send_product(p):
 
     # ===== استخراج و پاکسازی توضیحات کوتاه =====
     short_desc_raw = p.get("short_description", "")
-    # حذف تگ‌های HTML و فاصله‌های اضافی
     short_desc_clean = re.sub('<[^<]+?>', '', short_desc_raw).strip()
 
     gold_price = "—"
@@ -282,7 +281,7 @@ async def format_and_send_product(p):
     text += "✅ فروش با فاکتور رسمی\n✅ امکان خرید در 4 قسط با اسنپ‌پی\n✅ تخفیف 12 درصدی برای خرید نقدی\n\n"
     if all_features:
         text += "📋 *مشخصات:*\n" + "\n".join(all_features) + "\n\n"
-        # اضافه کردن توضیحات کوتاه در صورت وجود
+    
     if short_desc_clean:
         text += f"*{short_desc_clean}*\n\n"
         
@@ -315,38 +314,41 @@ async def check_and_send_products():
     history = get_sent_history()
     out_of_stock = get_out_of_stock()
 
-    all_products = []
+    # ===== اصلاح اصلی: جستجوی صفحه به صفحه برای پیدا کردن محصول ارسال‌نشده =====
+    unsent = None
     page = 1
     while True:
         batch = await fetch_products({"per_page": 100, "page": page, "orderby": "id", "order": "desc", "status": "publish"})
         if not batch:
+            break # به آخر آرشیو رسیدیم
+            
+        for p in batch:
+            if p.get("status") != "publish":
+                continue
+            if p.get("stock_status") == "outofstock":
+                out_of_stock.add(p["id"])
+                continue
+            if p["id"] in history:
+                continue
+            
+            unsent = p
+            break 
+        
+        if unsent:
             break
-        all_products.extend(batch)
         page += 1
-        if page > 20:
+        if page > 50:
             break
-
-    unsent = []
-    for p in all_products:
-        if p.get("status") != "publish":
-            continue
-        if p.get("stock_status") == "outofstock":
-            out_of_stock.add(p["id"])
-            continue
-        if p["id"] in history:
-            continue
-        unsent.append(p)
 
     save_out_of_stock(out_of_stock)
 
     if not unsent:
         return
 
-    selected_product = unsent[0]
-    success = await format_and_send_product(selected_product)
+    success = await format_and_send_product(unsent)
     
     if success:
-        history.add(selected_product["id"])
+        history.add(unsent["id"])
         save_sent_history(history)
 
 async def check_out_of_stock():
