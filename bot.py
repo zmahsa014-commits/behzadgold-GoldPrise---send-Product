@@ -462,8 +462,8 @@ async def main():
     tehran_tz = pytz.timezone('Asia/Tehran')
     scheduler = AsyncIOScheduler(timezone=tehran_tz)
     
-    scheduler.add_job(send_gold_price, 'cron', hour='0,9-23', minute='0')
-    scheduler.add_job(check_and_send_products, 'cron', hour='0,9-23', minute='0,30')
+    scheduler.add_job(send_gold_price, 'cron', hour='0,9-23/2', minute='0')
+    scheduler.add_job(check_and_send_products, 'cron', hour='0,9-23/2', minute='0')
     scheduler.add_job(check_out_of_stock, 'interval', hours=168) 
     
     scheduler.start()
